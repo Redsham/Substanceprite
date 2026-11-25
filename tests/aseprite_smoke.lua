@@ -870,7 +870,7 @@ local function checkBevelWear()
   local context = assert(Paint.context(app.site))
   local settings = {heightMode = "Height Map Layer", heightLayer = heightLayer,
     color = {r = 103, g = 51, b = 25}, chips = 0, edgeWear = 0, bevelWear = 100, bevelWidth = 2,
-    corrosion = 100, seed = 52}
+    corrosion = 100, rainStrength = 0, rainDuration = 100, seed = 52}
   local coverage = assert(Paint.preview(context, settings, nil, "Bevel Coverage"))
   local result = assert(Paint.preview(context, settings))
   local exposed = 0
@@ -892,8 +892,18 @@ local function checkBevelWear()
   local layers = assert(Paint.layers(group))
   local coat, heightCel = layers.outputs.paint:cel(1), layers.heightMap:cel(1)
   local initialCoat = coat.image.bytes
-  assert(layers.outputs.rust:cel(1).image:isEmpty(), "fresh bevel exposure stays clean")
   local metalCel = layers.metalMap:cel(1)
+  local rustCel = layers.outputs.rust:cel(1)
+  local initialMetal, initialHeight = metalCel.image.bytes, heightCel.image.bytes
+  assert(rustCel.image:isEmpty(), "dry bevel exposure stays clean")
+  assert(Paint.apply(reopen(), {rainStrength = 100}))
+  assert(not rustCel.image:isEmpty(), "rain oxidizes exposed bevels")
+  equal(coat.image.bytes, initialCoat, "rain does not change the coat")
+  equal(metalCel.image.bytes, initialMetal, "rain does not change the metal map")
+  equal(heightCel.image.bytes, initialHeight, "rain does not change the height map")
+  app.undo()
+  Paint.refresh(sprite, group)
+  assert(rustCel.image:isEmpty(), "Undo restores dry bevels")
   local authored = Image(metalCel.image)
   authored:putPixel(47, 12, gray(255))
   app.transaction("Draw an independent chip", function() metalCel.image = authored end)
@@ -918,7 +928,7 @@ local function checkBevelWear()
   equal(metalCel.image.bytes, authored.bytes, "disabling bevel wear keeps the manually exposed chip")
   assert(coat.image.bytes ~= chippedCoat and not layers.outputs.rust:cel(1).image:isEmpty())
   sprite:close()
-  print("PASS optional bevels reveal clean steel, recalculate from height, and respect masks and Undo")
+  print("PASS optional bevels recalculate from height and rain, and respect masks and Undo")
 end
 
 checkBevelWear()

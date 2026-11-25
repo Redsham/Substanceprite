@@ -21,9 +21,9 @@ local function arrayEqual(a, b, count)
   return true
 end
 
-local function trailScore(trails, width)
+local function layerCoverage(pixels, width)
   local total, lastRow = 0, -1
-  for index, pixel in pairs(trails) do
+  for index, pixel in pairs(pixels) do
     total = total + alpha(pixel)
     lastRow = math.max(lastRow, (index - 1) // width)
   end
@@ -31,13 +31,13 @@ local function trailScore(trails, width)
 end
 
 return function(test)
-  test("bevel coverage removes only the permitted paint and leaves corrosion on chips", function()
+  test("bevel coverage removes only the permitted paint and remains optional", function()
     local generated = {chips = {0, 0, 0, 192, 0}, rust = {0, 0, 0, 223, 0}, tones = {0, 0, 0, 155, 0},
       wear = {bevel = {255, 255, 140, 128, 255}}}
     local function base(x)
       if x < 4 then return 100 + x * 25, 101 + x * 25, 102 + x * 25, 255 end
     end
-    local settings = {bevelWear = 100, chips = 0, corrosion = 100,
+    local settings = {bevelWear = 100, chips = 0, corrosion = 0,
       effectMasks = {bevel = {255, 0, 128, 255, 255}}}
     local worn = Paint.render(5, 1, settings, nil, base, generated)
     assert(worn.bevel[1] == 255 and worn.paint[1] == nil and worn.metal[1] == nil,
@@ -45,11 +45,77 @@ return function(test)
     assert(worn.bevel[2] == nil and alpha(worn.paint[2]) == 255, "black mask protects paint")
     assert(worn.bevel[3] == 70 and alpha(worn.paint[3]) == 185, "gray mask reduces exposure")
     assert(alpha(worn.paint[4]) == 31 and worn.paint[5] == nil, "coverage combines with chips inside the footprint")
-    assert(worn.rust[1] == nil and worn.rust[3] == nil and worn.rust[4] ~= nil)
+    assert(next(worn.rust) == nil, "zero corrosion leaves exposed steel clean")
     settings.bevelWear = 0
+    settings.corrosion = 100
     local clean = Paint.render(5, 1, settings, nil, base, generated)
     assert(next(clean.bevel) == nil and alpha(clean.paint[1]) == 255)
-    assert(worn.rust[4] == clean.rust[4], "bevel wear leaves existing chip corrosion intact")
+    assert(next(clean.rust) == 4 and clean.rust[4], "chip corrosion works without bevel wear")
+  end)
+
+  test("rain grows rust on exposed bevels and carries it down the painted surface", function()
+    local width, height, ribEnd = 37, 50, 13
+    local heights = {}
+    for y = 0, height - 1 do
+      for x = 0, width - 1 do
+        heights[y * width + x + 1] = x >= 11 and x <= 18 and y >= 1 and y <= ribEnd and 0.85 or 0.32
+      end
+    end
+    local function base() return 105, 115, 118, 255 end
+    local settings = {chips = 0, bevelWear = 100, corrosion = 100, trails = 100, seed = 219, heights = heights}
+    local function storm(strength, duration)
+      settings.rainStrength, settings.rainDuration = strength, duration
+      return Paint.render(width, height, settings, nil, base)
+    end
+
+    local dry = storm(0, 100)
+    local light = storm(20, 35)
+    local heavy = storm(100, 35)
+    local long = storm(100, 100)
+    local dryRust = layerCoverage(dry.rust, width)
+    local lightRust = layerCoverage(light.rust, width)
+    local heavyRust = layerCoverage(heavy.rust, width)
+    local longRust = layerCoverage(long.rust, width)
+    assert(lightRust > dryRust and heavyRust > lightRust and longRust > heavyRust,
+      "more rain and a longer storm should grow more rust on the same worn bevels")
+    assert(arrayEqual(dry.bevel, long.bevel, width * height) and arrayEqual(dry.paint, long.paint, width * height),
+      "rain does not expand the damaged coating")
+    assert(next(dry.rust) == nil and next(dry.trails) == nil, "dry bevels stay bare")
+    local noTime = storm(100, 0)
+    assert(next(noTime.rust) == nil and next(noTime.trails) == nil, "a storm with no duration does not age the bevel")
+    local _, endRow = layerCoverage(long.trails, width)
+    assert(endRow > ribEnd, "collected rust reaches the paint below the rib")
+    local bare, rusty = false, false
+    for i, exposure in pairs(long.bevel) do
+      if exposure == 255 then
+        if long.rust[i] then rusty = true else bare = true end
+      end
+    end
+    assert(bare and rusty, "corrosion grows in patches along fully exposed metal")
+    for i, pixel in pairs(long.rust) do
+      assert(long.bevel[i] and alpha(pixel) <= long.bevel[i], "corrosion escaped exposed bevel metal")
+    end
+    for i in pairs(long.trails) do
+      assert(long.paint[i] and (i - 1) // width > 1, "streaks stay on downstream paint")
+    end
+
+    settings.rainStrength, settings.rainDuration = nil, nil
+    local defaultWeather = Paint.render(width, height, settings, nil, base)
+    assert(next(defaultWeather.rust), "bevels weather with the default rainfall")
+
+    settings.trails = 0
+    local noTrails = storm(100, 100)
+    assert(arrayEqual(noTrails.rust, long.rust, width * height) and next(noTrails.trails) == nil,
+      "rust weathering still works with runoff disabled")
+    settings.trails = 100
+    settings.effectMasks = {rust = {}}
+    local protected = storm(100, 100)
+    assert(next(protected.rust) == nil and next(protected.trails) == nil and next(protected.bevel),
+      "the Rust Mask stops corrosion and runoff on exposed metal")
+    settings.effectMasks = {bevel = {}}
+    local covered = storm(100, 100)
+    assert(next(covered.bevel) == nil and next(covered.rust) == nil and next(covered.trails) == nil,
+      "the Bevel Wear Mask prevents exposure and its weathering")
   end)
 
   test("arbitrary paint colors retain the order of the underlying shades", function()
@@ -168,12 +234,12 @@ return function(test)
     local mild = storm(20, 25)
     local downpour = storm(100, 25)
     local prolonged = storm(100, 100)
-    local mildScore = trailScore(mild.trails, width)
-    local heavyScore, heavyEnd = trailScore(downpour.trails, width)
-    local longScore, longEnd = trailScore(prolonged.trails, width)
+    local mildScore = layerCoverage(mild.trails, width)
+    local heavyScore, heavyEnd = layerCoverage(downpour.trails, width)
+    local longScore, longEnd = layerCoverage(prolonged.trails, width)
     assert(heavyScore > mildScore and heavyScore > 0, "heavier rain must mobilize more pigment")
     assert(longEnd > heavyEnd and longScore > heavyScore, "longer rain must carry pigment farther")
-    assert(longScore > trailScore(storm(85, 100).trails, width), "strength must remain adjustable in heavy rain")
+    assert(longScore > layerCoverage(storm(85, 100).trails, width), "strength must remain adjustable in heavy rain")
     assert(next(storm(0, 100).trails) == nil and next(storm(100, 0).trails) == nil,
       "zero rain or time stops the runoff")
     assert(arrayEqual(mild.paint, prolonged.paint, width * height)

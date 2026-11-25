@@ -3,7 +3,7 @@
   "publisher": "substanceprite",
   "displayName": "Substanceprite",
   "description": "Procedural pixel-art materials, alpha stamps, configurable prop details, editable scene lighting and paint wear for Aseprite.",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "categories": ["Scripts"],
   "contributes": {
     "scripts": [{ "path": "./main.lua" }]

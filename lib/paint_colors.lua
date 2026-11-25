@@ -10,7 +10,7 @@ Colors.definitions = {
   { id = "primer", label = "Primer at Exposed Edges", count = 3 },
   { id = "scuff", label = "Scuffed Paint", count = 3 },
   { id = "fading", label = "Faded Paint", count = 3 },
-  { id = "rust", label = "Rust in Metal", count = 3 },
+  { id = "rust", label = "Rust on Metal", count = 3 },
   { id = "trails", label = "Rust Trails", count = 3 },
   { id = "dirt", label = "Dirt", count = 3 },
   { id = "moss", label = "Moss", count = 3 },

@@ -9,7 +9,7 @@ local PaletteUI = require("ui.paint_palette")
 
 local DialogUI = {}
 local weatherSliders = {
-  { id = "corrosion", label = "Rust in Chips", min = 0, max = 100 },
+  { id = "corrosion", label = "Rust on Metal", min = 0, max = 100 },
   { id = "trails", label = "Rust Trails", min = 0, max = 100 },
   { id = "dirt", label = "Dirt", min = 0, max = 100 },
   { id = "moss", label = "Moss", min = 0, max = 100 },

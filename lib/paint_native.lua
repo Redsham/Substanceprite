@@ -14,7 +14,7 @@ local maskedEffects = {"rust", "trails", "dirt", "moss", "scuff", "fading", "pri
 local names = {
   undercoat = "Clean Metal", metal = "Exposed Metal Tint", paint = "Paint",
   primer = "Primer at Exposed Edges", fading = "Faded Paint", scuff = "Scuffs",
-  rust = "Rust in Chips", trails = "Rust Trails",
+  rust = "Rust on Metal", trails = "Rust Trails",
   dirt = "Dirt", moss = "Moss", soot = "Soot", mapsGroup = "Maps & Masks",
   metalMap = "Metal Map", heightMap = "Height Map", bevelMask = "Bevel Wear Mask", rustMask = "Rust Mask",
   trailsMask = "Rust Trails Mask", dirtMask = "Dirt Mask", mossMask = "Moss Mask",
@@ -531,6 +531,7 @@ local function updateStages(context, group, recipe, images)
     local layer = layers and layers[stage]
     local image = images[stage]
     if layer then
+      if stage == "rust" and layer.name == "Rust in Chips" then layer.name = names.rust end
       replace(context, layer, image)
     elseif wantsStage(recipe, stage) then
       image = image or makeImage(context.sprite, context.target.width, context.target.height)
