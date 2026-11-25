@@ -1,0 +1,9 @@
+dist/
+*.aseprite-extension
+!download/Substanceprite.aseprite-extension
+*.luac
+__pycache__/
+.venv/
+.DS_Store
+__pref.lua
+__info.json
