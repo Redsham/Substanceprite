@@ -34,6 +34,7 @@ function Streaks.sampler(width, height, heights, mask, seamless, sourceAt, optio
 
   local scale = option(options.scale, 4, 1, 64)
   local seed = floor(option(options.seed, 1, -2147483648, 4294967295))
+  local routes = type(options.routes) == "function" and options.routes or nil
   local guide = type(heights) == "table" and heights or nil
   local decay = 0.69 + 0.18 * unit((scale - 1) / 18)
   local epsilon = 0.00015
@@ -103,22 +104,29 @@ function Streaks.sampler(width, height, heights, mask, seamless, sourceAt, optio
         local left = width > 1 and allowed(x - 1, y + 1) and (ahead or allowed(x - 1, y))
         local right = width > 1 and allowed(x + 1, y + 1) and (ahead or allowed(x + 1, y))
         if seamless and width == 2 and left then right = false end
-        local center = heightAt(x, y)
-        local lower = ahead and heightAt(x, y + 1) or nil
-        local lowerLeft = left and heightAt(x - 1, y + 1) or nil
-        local lowerRight = right and heightAt(x + 1, y + 1) or nil
-        local middleWeight = ahead and routeWeight(center, lower, false) or 0
-        local leftWeight = left and routeWeight(center, lowerLeft, true, lower) or 0
-        local rightWeight = right and routeWeight(center, lowerRight, true, lower) or 0
-        local total = middleWeight + leftWeight + rightWeight
-
-        local pooling = 0
-        if center then
-          local lip = lower and unit((lower - center) * 3.2) or 0
-          local sideLeft, sideRight = heightAt(x - 1, y), heightAt(x + 1, y)
-          local gutter = sideLeft and sideRight and unit((min(sideLeft, sideRight) - center) * 2.8) or 0
-          pooling = unit(0.70 * lip + 0.36 * gutter)
+        local leftWeight, middleWeight, rightWeight, pooling
+        if routes then
+          leftWeight, middleWeight, rightWeight, pooling = routes(x, y)
+          if not left then leftWeight = 0 end
+          if not ahead then middleWeight = 0 end
+          if not right then rightWeight = 0 end
+        else
+          local center = heightAt(x, y)
+          local lower = ahead and heightAt(x, y + 1) or nil
+          local lowerLeft = left and heightAt(x - 1, y + 1) or nil
+          local lowerRight = right and heightAt(x + 1, y + 1) or nil
+          middleWeight = ahead and routeWeight(center, lower, false) or 0
+          leftWeight = left and routeWeight(center, lowerLeft, true, lower) or 0
+          rightWeight = right and routeWeight(center, lowerRight, true, lower) or 0
+          pooling = 0
+          if center then
+            local lip = lower and unit((lower - center) * 3.2) or 0
+            local sideLeft, sideRight = heightAt(x - 1, y), heightAt(x + 1, y)
+            local gutter = sideLeft and sideRight and unit((min(sideLeft, sideRight) - center) * 2.8) or 0
+            pooling = unit(0.70 * lip + 0.36 * gutter)
+          end
         end
+        local total = middleWeight + leftWeight + rightWeight
         if total == 0 and (ahead or left or right) then pooling = max(pooling, 0.75) end
         if y >= 0 and received >= epsilon then
           local variation = 0.87 + 0.26 * grain(x, h, seed)

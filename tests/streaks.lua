@@ -1,4 +1,5 @@
 local Streaks = require("lib.streaks")
+local Rain = require("lib.rain")
 
 local function grid(width, height, valueAt)
   local result = {}
@@ -73,6 +74,21 @@ return function(test)
     for y = 4, height - 1 do
       for x = 0, width - 1 do assert(trail(x, y) == 0, "pigment crossed a transparent gap") end
     end
+  end)
+
+  test("rust pigment follows the rain bypass and cannot enter a blocked uphill route", function()
+    local width, height = 13, 18
+    local guide = grid(width, height, function(x, y)
+      return x >= 5 and x <= 7 and y >= 6 and y <= 10 and 0.59 or 0.5
+    end)
+    local _, routes = Rain.sampler(width, height, guide, false, nil, {contour = true, wrapY = false})
+    local left, middle, right = routes(5, 5)
+    assert(left == 1 and middle == 0 and right == 0)
+    local oxide = source(5, 5, 0.8, 0.71)
+    local trail = Streaks.sampler(width, height, guide, nil, false, oxide, {routes = routes})
+    assert(trail(4, 6) > 0.1 and trail(5, 6) == 0 and trail(6, 6) == 0,
+      "the stain must use the same open branch as the rain particle")
+    assert(trail(4, 8) > 0.05 and trail(5, 8) == 0, "the trail should continue around the buildup")
   end)
 
   test("seamless rust trails cross tile boundaries and compare exactly in different sampling orders", function()

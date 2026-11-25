@@ -273,6 +273,41 @@ return function(test)
     end
   end)
 
+  test("dirt and moss relief redirects rain and rust without changing the height guide", function()
+    local width, height = 52, 43
+    local heights, exposed = {}, {}
+    for i = 1, width * height do heights[i] = 0.48 end
+    for x = 9, 40 do exposed[width * 3 + x + 1] = 255 end
+    local function base() return 106, 111, 115, 255 end
+    local settings = {chips = 0, corrosion = 100, trails = 100, dirt = 88, moss = 100,
+      rainStrength = 84, rainDuration = 88, seed = 219, heights = heights, captureRain = true}
+    local raised = Paint.render(width, height, settings, nil, base, nil, exposed)
+    assert(next(raised.relief.dirt) and next(raised.relief.moss) and raised.rain.base)
+    local deflected, pooled = 0, 0
+    for y = 0, height - 1 do
+      for x = 0, width - 1 do
+        local i = y * width + x + 1
+        assert(heights[i] == 0.48 and raised.weatherHeights[i] >= heights[i])
+        local l, _, r = raised.rain.routeAt(x, y)
+        local baseL, _, baseR = raised.rain.base.routeAt(x, y)
+        if math.abs((r - l) - (baseR - baseL)) > 0.05 then deflected = deflected + 1 end
+        local _, held = raised.rain.waterAt(x, y)
+        local _, baseHeld = raised.rain.base.waterAt(x, y)
+        if held > baseHeld + 0.01 then pooled = pooled + 1 end
+      end
+    end
+    assert(deflected > 20 and pooled > 10, "deposits should steer and retain water")
+    settings.depositOpacity = {dirt = 0, moss = 0}
+    local hidden = Paint.render(width, height, settings, nil, base, nil, exposed)
+    assert(not hidden.rain.base and arrayEqual(hidden.weatherHeights, heights, width * height))
+    assert(not arrayEqual(raised.trails, hidden.trails, width * height), "oxide must follow the changed water routes")
+    for _, key in ipairs({"paint", "rust"}) do assert(arrayEqual(raised[key], hidden[key], width * height)) end
+    settings.depositOpacity = nil
+    settings.captureRain = false
+    local baked = Paint.render(width, height, settings, nil, base, nil, exposed)
+    assert(arrayEqual(raised.trails, baked.trails, width * height), "capturing paths must keep the bake identical")
+  end)
+
   test("rain strength affects stain and duration carries it farther down", function()
     local width, height, sourceX, sourceY = 24, 44, 11, 1
     local metal = {[sourceY * width + sourceX + 1] = 255}

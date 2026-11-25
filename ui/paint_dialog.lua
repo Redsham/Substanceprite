@@ -6,8 +6,10 @@ local Native = require("lib.paint_native")
 local Paint = require("lib.paint_stack")
 local Colors = require("lib.paint_colors")
 local PaletteUI = require("ui.paint_palette")
+local RainPreview = require("ui.rain_preview")
 
 local DialogUI = {}
+local rainMode = "Rain Flow"
 local weatherSliders = {
   { id = "corrosion", label = "Rust on Metal", min = 0, max = 100 },
   { id = "trails", label = "Rust Trails", min = 0, max = 100 },
@@ -53,12 +55,16 @@ function DialogUI.open(site, providedContext)
   for _, group in ipairs(Native.list(sprite)) do groups[#groups + 1] = group end
   local heightOptions, heightLayers, preferredHeight = Common.surfaceSources(
     { sprite = sprite, layer = context.source, frame = context.frame }, groups)
-  local preview, timer, status
+  local preview, timer, animation, status
+  local rain = {elapsed = 0, playing = true}
   local rainEdited = false
   local dlg = Dialog{
     title = "Substanceprite - Paint & Wear",
     autofit = Align.BOTTOM | Align.LEFT,
-    onclose = function() if timer then timer:stop() end end,
+    onclose = function()
+      if timer then timer:stop() end
+      if animation then animation:stop() end
+    end,
   }
 
   local function read()
@@ -89,17 +95,40 @@ function DialogUI.open(site, providedContext)
     end
   end
 
+  local function updateRainControls()
+    local active = dlg.data.previewMode == rainMode
+    local hasTracks = active and rain.tracks and #rain.tracks > 0 or false
+    dlg:modify{ id = "rainPlayback", visible = active, enabled = hasTracks,
+      text = rain.playing and "Pause" or "Play" }
+    dlg:modify{ id = "rainBaseHeight", visible = active and rain.trace ~= nil and rain.trace.base ~= nil }
+    dlg:modify{ id = "rainLegend", visible = active }
+    animation:stop()
+    if hasTracks and rain.playing then animation:start() end
+  end
+
+  local function rebuildRain(seed)
+    local trace = rain.trace
+    if trace and dlg.data.rainBaseHeight and trace.base then trace = trace.base end
+    rain.tracks = trace and RainPreview.build(trace, rain.rect, seed) or nil
+    updateRainControls()
+  end
+
   local function update()
     local message
     if context then
       local rect = Common.previewArea(context.target)
-      preview, message = Native.preview(context, read(), rect, dlg.data.previewMode)
+      local settings = read()
+      preview, message, rain.trace = Native.preview(context, settings, rect, dlg.data.previewMode)
+      rain.rect = rect
+      rebuildRain(settings.seed)
       local target = context.target
       local size = ("%d × %d px"):format(target.width, target.height)
       if rect.width < target.width or rect.height < target.height then size = size .. " · Detail" end
+      if rain.trace and #rain.tracks == 0 then size = size .. " · No flowing water" end
       showStatus(message or size)
     else
-      preview = nil
+      preview, rain.trace, rain.tracks = nil, nil, nil
+      updateRainControls()
       showStatus(errorMessage)
     end
     dlg:modify{ id = "apply", enabled = preview ~= nil }
@@ -138,10 +167,29 @@ function DialogUI.open(site, providedContext)
 
   dlg:label{ label = "Source", text = context.source.name }
   dlg:combobox{ id = "previewMode", label = "Preview", option = "Result",
-    options = { "Result", "Original", "Bevel Coverage", "Metal Map", "Height Map", "Weathered Height" },
-    onchange = schedule }
+    options = { "Result", "Original", rainMode, "Bevel Coverage", "Metal Map", "Height Map", "Weathered Height" },
+    onchange = function()
+      if dlg.data.previewMode == rainMode then rainEdited = true end
+      schedule()
+    end }
+  dlg:button{ id = "rainPlayback", text = "Pause", visible = false, onclick = function()
+    rain.playing = not rain.playing
+    updateRainControls()
+  end }
+  dlg:samerow()
+  dlg:check{ id = "rainBaseHeight", text = "Base Height Only", visible = false, onclick = function()
+    rebuildRain(dlg.data.seed)
+    dlg:repaint()
+  end }
+  dlg:label{ id = "rainLegend", text = "Blue water · Amber rust · Bright dots pool", visible = false }
   dlg:canvas{ id = "preview", width = 330, height = 138,
-    onpaint = function(ev) Common.drawPixelPreview(ev.context, preview) end }
+    onpaint = function(ev)
+      if dlg.data.previewMode == rainMode then
+        RainPreview.draw(ev.context, preview, rain.tracks, rain.elapsed)
+      else
+        Common.drawPixelPreview(ev.context, preview)
+      end
+    end }
   dlg:label{ id = "status", text = " " }
 
   dlg:tab{ id = "paintTab", text = "Paint" }
@@ -217,6 +265,10 @@ function DialogUI.open(site, providedContext)
   timer = Timer{ interval = 0.10, ontick = function()
     timer:stop()
     update()
+  end }
+  animation = Timer{ interval = 0.05, ontick = function()
+    rain.elapsed = rain.elapsed + 1.1
+    dlg:repaint()
   end }
   refreshPalette()
   schedule()

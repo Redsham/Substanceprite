@@ -94,6 +94,29 @@ return function(test)
     assert(flow == direct and retained == directRetained and flow > 0)
   end)
 
+  test("contour routes steer around shallow deposits and retain water at their upstream edge", function()
+    local w, h = 13, 18
+    local flat = field(w, h, function() return 0.5 end)
+    local raised = field(w, h, function(x, y)
+      return flat[y * w + x + 1] + ((x >= 5 and x <= 7 and y >= 6 and y <= 10) and 0.063 or 0)
+    end)
+    local settings = {intensity = 88, duration = 91, contour = true, wrapY = false}
+    local flatWater, flatRoutes = Rain.sampler(w, h, flat, false, nil, settings)
+    local water, routes = Rain.sampler(w, h, raised, false, nil, settings)
+    local flatLeft, flatDown, _, flatPool = flatRoutes(5, 5)
+    local left, down, right, pool = routes(5, 5)
+    assert(math.abs(left + down + right - 1) < 1e-9, "route fractions must account for all outgoing water")
+    assert(flatDown > 0.9 and left > 0.8 and down < flatDown * 0.2)
+    assert(routes(5, 4) > flatLeft, "water starts turning before it reaches the deposit")
+    local _, flatHeld = flatWater(5, 5)
+    local _, held = water(5, 5)
+    assert(pool > flatPool and held > 1.25 * flatHeld, "a raised lip holds water before the bypass")
+
+    local _, dryRoutes = Rain.sampler(w, h, raised, false, nil, {intensity = 0, contour = true})
+    local a, b, c, p = dryRoutes(5, 5)
+    assert(a == 0 and b == 0 and c == 0 and p == 0, "dry weather has no particle routes")
+  end)
+
   test("a horizontal repeat can keep a physical rain inlet at the top", function()
     local w, h = 5, 10
     local first = Rain.sampler(w, h, nil, true, nil, { wrapY = false })

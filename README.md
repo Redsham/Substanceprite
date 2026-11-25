@@ -88,11 +88,13 @@ After clicking **Apply Lighting**, you can reopen **Lighting…** from any layer
 Select a metal layer in an RGB sprite and open **Sprite → Substanceprite → Paint & Wear…**, or click **Paint Existing Metal…** in **Material**. In **Paint**, choose the coating color and coverage. The paint follows the shading of the original sprite.
 
 - **Wear** controls **Chips**, **Bevel Wear**, **Edge Wear**, **Scuffs**, and **Fading**. Find **Bevel Width (px)**, edge width, scuff direction, and Seed under **Pattern Options**.
-- **Weathering** adds rust on exposed metal, runoff streaks, dirt, moss, and soot. **Rain Settings** controls rain strength and duration. Streaks begin at rusty areas and run downhill along the relief.
+- **Weathering** adds rust on exposed metal, runoff streaks, dirt, moss, and soot. **Rain Settings** controls rain strength and duration. Water runs downward, goes around patches of buildup, and collects against rises. Rust streaks carry pigment along the same routes.
 - **Colors** sets shadow, midtone, and highlight colors for primer, scuffs, fading, and deposits. For a three-color paint ramp, select **Paint → Use Custom Paint Ramp**. **Tint Exposed Metal** controls the color of exposed steel.
 - **Maps & Masks** opens the editable metal map, height map, and individual effect masks. Select a map layer and edit it with the brush. White exposes steel on the metal map and marks raised areas on the height map. Click **Show Result** when finished.
 
 Dirt and moss build up a shallow surface. Use **Preview → Weathered Height** to see the combined height. Lighting and Prop Details that use the painted material's **Height Map** pick up the buildup after **Update Material**. The editable height map stays available for sculpting the base surface.
+
+Choose **Preview → Rain Flow** to see drops move over the artwork. Blue particles trace water, pale dots pause where it pools, and amber particles carry dissolved rust. **Base Height Only** shows the same storm on the original height map. **Pause** freezes the current frame. The animation stays in the preview.
 
 #### Bevel wear
 

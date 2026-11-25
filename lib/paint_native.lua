@@ -397,7 +397,15 @@ local function initialHeight(context, settings)
   return out
 end
 
-local function prepare(context, settings, commitMetal)
+local function depositOpacity(context, role, appliedOnly)
+  local layer = context.layers and context.layers[role]
+  local cel = layer and layer:cel(context.frame)
+  if appliedOnly and not cel then return 0 end
+  return visibleOpacity(layer or context.group or context.source.parent, context.sprite)
+    * (cel and cel.opacity or 255) / 255
+end
+
+local function prepare(context, settings, flags)
   local target, layers, frame = context.target, context.layers, context.frame
   local recipe = mergedRecipe(context.saved, settings)
   local height, message
@@ -405,6 +413,9 @@ local function prepare(context, settings, commitMetal)
   else height, message = initialHeight(context, settings) end
   if not height then return nil, message end
   local options = mergedRecipe(recipe, {})
+  options.depositOpacity = {dirt = depositOpacity(context, "dirt", flags.appliedOnly),
+    moss = depositOpacity(context, "moss", flags.appliedOnly)}
+  options.captureRain = flags.captureRain
   options.heights = {}
   for index, value in pairs(height) do options.heights[index] = value / 255 end
   options.rustAt = function(x, y) return context.oldRust(target.x + x, target.y + y) end
@@ -430,7 +441,7 @@ local function prepare(context, settings, commitMetal)
         end
       end
       baseline = generated.chips
-      regenerate = regenerate or (commitMetal and baselineChanged)
+      regenerate = regenerate or (flags.commitMetal and baselineChanged)
     end
     options.effectMasks = {}
     for _, key in ipairs(maskedEffects) do
@@ -473,31 +484,11 @@ local function grayImage(context, values, mode)
   return imageFrom(context.sprite, target.width, target.height, pixels)
 end
 
-local function depositOpacity(context, role, appliedOnly)
-  local layer = context.layers and context.layers[role]
-  local cel = layer and layer:cel(context.frame)
-  if appliedOnly and not cel then return 0 end
-  return visibleOpacity(layer or context.group or context.source.parent, context.sprite)
-    * (cel and cel.opacity or 255) / 255
-end
-
-local function weatherHeightImage(context, prepared, appliedOnly)
+local function weatherHeightImage(context, prepared)
   local target, values = context.target, {}
-  local relief = prepared.rendered.relief
-  local dirtOpacity = depositOpacity(context, "dirt", appliedOnly)
-  local mossOpacity = depositOpacity(context, "moss", appliedOnly)
-  for y = 0, target.height - 1 do
-    for x = 0, target.width - 1 do
-      if target.alphaAt(x, y) > 0 then
-        local index = y * target.width + x + 1
-        local added = (relief.dirt[index] or 0) * dirtOpacity + (relief.moss[index] or 0) * mossOpacity
-        local base = prepared.height[index]
-        if base == nil and added > 0 then
-          base = Surface.luminance(target.read(x + target.x, y + target.y)) * 255
-        end
-        if base ~= nil then values[index] = byte(base + 255 * added) end
-      end
-    end
+  for index, height in pairs(prepared.rendered.weatherHeights or {}) do
+    local x, y = (index - 1) % target.width, (index - 1) // target.width
+    if target.alphaAt(x, y) > 0 then values[index] = byte(height * 255) end
   end
   return grayImage(context, values, "height")
 end
@@ -511,7 +502,7 @@ function Native.preview(context, settings, rect, channel)
     image:drawImage(context.original, Point(-target.x - rect.x, -target.y - rect.y))
     return image
   end
-  local prepared, message = prepare(context, settings)
+  local prepared, message = prepare(context, settings, {captureRain = channel == "Rain Flow"})
   if not prepared then return nil, message end
   if channel == "Weathered Height" then
     image:drawImage(weatherHeightImage(context, prepared), Point(-rect.x, -rect.y))
@@ -534,7 +525,7 @@ function Native.preview(context, settings, rect, channel)
       image:drawImage(rendered, Point(-rect.x, -rect.y), opacity, layer and layer.blendMode or BlendMode.NORMAL)
     end
   end
-  return image
+  return image, nil, prepared.rendered.rain
 end
 
 local function createLayer(context, parent, role, image, editable)
@@ -634,7 +625,7 @@ end
 
 function Native.apply(context, settings)
   settings = settings or {}
-  local prepared, message = prepare(context, settings, true)
+  local prepared, message = prepare(context, settings, {commitMetal = true})
   if not prepared then return nil, message end
   local sprite, group = context.sprite, context.group
   local images = outputImages(context, prepared)
@@ -689,10 +680,10 @@ end
 
 local function refreshFrame(sprite, group, layers, frame)
   local context = Native.context{sprite = sprite, layer = group, frame = frame}
-  local prepared = context and assert(prepare(context, {}))
+  local prepared = context and assert(prepare(context, {}, {appliedOnly = true}))
   local images = prepared and outputImages(context, prepared)
   if prepared and layers.weatherHeightMap then
-    images.weatherHeightMap = weatherHeightImage(context, prepared, true)
+    images.weatherHeightMap = weatherHeightImage(context, prepared)
   end
   local changed = false
   for _, stage in ipairs(recomputedLayers) do

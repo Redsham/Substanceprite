@@ -201,6 +201,71 @@ local function primerField(width, height, metal, footprint, seamless)
   return field
 end
 
+local function layDeposits(width, height, params, surface, footprint, base, waterAt, output)
+  for _, stage in ipairs(stages) do
+    local key = stage.key
+    local strength = percent(params, key)
+    local field = layerVariant(width, height, params, surface, footprint, stage, strength)
+    if field then
+      local sample = Effects.sampler(stage.style, Colors.get(params.palette, key))
+      local heights = output.relief[key]
+      for i, source in pairs(base) do
+        if (field[i] or 0) > 0 then
+          local r, g, b, sampleAlpha, relief = sample(field[i])
+          local wet = 1
+          if waterAt and heights then
+            local flow, retained = waterAt((i - 1) % width, (i - 1) // width)
+            wet = key == "moss" and (0.35 + 1.35 * retained) or (0.55 + 1.05 * flow)
+          end
+          local alpha = byte((sampleAlpha or 0) * strength * (source >> 24) / 255 * wet
+            * permission(params.effectMasks, key, i))
+          if alpha > 0 then
+            output[key][i] = pixel(r, g, b, alpha)
+            -- Relief from the sampler already includes its pigment alpha.
+            if heights and relief then heights[i] = relief * alpha / sampleAlpha end
+          end
+        end
+      end
+    end
+  end
+end
+
+local function withDeposits(heights, relief, opacity, base)
+  local dirt = number(opacity and opacity.dirt, 1, 0, 1)
+  local moss = number(opacity and opacity.moss, 1, 0, 1)
+  if (dirt == 0 or not next(relief.dirt)) and (moss == 0 or not next(relief.moss)) then return heights end
+  local terrain = {}
+  for i, source in pairs(base) do
+    local height = heights and heights[i]
+    local lift = dirt * (relief.dirt[i] or 0) + moss * (relief.moss[i] or 0)
+    if lift > 0 then height = min(1, (height or Surface.luminance(rgba(source))) + lift) end
+    terrain[i] = height
+  end
+  return terrain
+end
+
+local function shadeDeposits(base, output, width, context)
+  for _, stage in ipairs(stages) do
+    local key = stage.key
+    for i, deposit in pairs(output[key]) do
+      local dr, dg, db, alpha = rgba(deposit)
+      local r, g, b = rgba(base[i])
+      r, g, b = mixed(r, g, b, output.metal[i])
+      r, g, b = mixed(r, g, b, output.paint[i])
+      r, g, b = mixed(r, g, b, output.primer[i])
+      r, g, b = mixed(r, g, b, output.fading[i])
+      r, g, b = mixed(r, g, b, output.scuff[i])
+      r, g, b = mixed(r, g, b, output.rust[i])
+      r, g, b = mixed(r, g, b, output.trails[i])
+      if key ~= "dirt" then r, g, b = mixed(r, g, b, output.dirt[i]) end
+      if key == "soot" then r, g, b = mixed(r, g, b, output.moss[i]) end
+      local x, y = (i - 1) % width, (i - 1) // width
+      dr, dg, db = Lighting.tint(dr, dg, db, r, g, b, alpha / 255, context(x, y), 75)
+      output[key][i] = pixel(dr, dg, db, alpha)
+    end
+  end
+end
+
 function Paint.render(width, height, params, mask, baseReader, generated, chipMask)
   params = params or {}
   local output = {metal = {}, paint = {}, bevel = {}, primer = {}, fading = {}, scuff = {}, rust = {},
@@ -244,17 +309,27 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
   local heights = surface and surface.heights
   local trails = percent(params, "trails")
   local rainStrength, rainDuration = percent(params, "rainStrength"), percent(params, "rainDuration")
-  local function storm()
-    return Rain.sampler(width, height, heights, params.seamless == true, footprint, {
-      intensity = rainStrength * 100, duration = rainDuration * 100, wrapY = false,
+  local seamless = params.seamless == true
+  local function storm(terrain)
+    return Rain.sampler(width, height, terrain, seamless, footprint, {
+      intensity = rainStrength * 100, duration = rainDuration * 100, wrapY = false, contour = true,
     })
   end
-  local waterAt
-  if (params.rainStrength ~= nil or params.rainDuration ~= nil)
-      and (trails > 0 or percent(params, "dirt") > 0 or percent(params, "moss") > 0) then
-    waterAt = storm()
+  local baseWaterAt, baseRouteAt
+  local configuredRain = params.rainStrength ~= nil or params.rainDuration ~= nil
+  if configuredRain and (params.captureRain or trails > 0 or percent(params, "dirt") > 0 or percent(params, "moss") > 0) then
+    baseWaterAt, baseRouteAt = storm(heights)
   end
-  local bevelWaterAt, bevelFeedsRunoff = waterAt, false
+  -- Close the accumulation step before rerouting the runoff over it.
+  layDeposits(width, height, params, surface, footprint, base, baseWaterAt, output)
+  local terrain = withDeposits(heights, output.relief, params.depositOpacity, base)
+  output.weatherHeights = terrain
+  local waterAt, routeAt = baseWaterAt, baseRouteAt
+  if terrain ~= heights and (configuredRain or trails > 0 or params.captureRain) then
+    waterAt, routeAt = storm(terrain)
+  end
+  local bevelWaterAt, bevelRouteAt = waterAt, routeAt
+  local bevelFeedsRunoff = false
   local stormAge = rainStrength > 0 and rainDuration ^ 0.55 or 0
   local masks, rustAt = params.effectMasks, params.rustAt
   local sourceColor = params.color or Paint.defaults.color
@@ -342,7 +417,7 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
         local added = oxide * (1 - savedCoverage) * chipWeight
         local bevelOxide = 0
         if bevelShare > 0 and stormAge > 0 then
-          bevelWaterAt = bevelWaterAt or storm()
+          if not bevelWaterAt then bevelWaterAt, bevelRouteAt = storm(terrain) end
           local flow, retained, exposure = bevelWaterAt(x, y)
           -- A passing film contributes less than water held against a lip.
           local wetness = stormAge * min(1, 2.65 * retained + 0.74 * flow + 0.32 * exposure * rainStrength)
@@ -391,23 +466,26 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
   end
 
   local runoffWater = waterAt or (bevelFeedsRunoff and bevelWaterAt)
+  local runoffRoutes = routeAt or (bevelFeedsRunoff and bevelRouteAt)
+  local function dissolvedRust(water, x, y)
+    local i = y * width + x + 1
+    local oxide = ((output.rust[i] or 0) >> 24) / 255
+    if water and oxide > 0 then
+      local flow, retained, exposure = water(x, y)
+      local washed = max(flow, retained * 0.72, exposure * rainStrength * 0.36)
+      oxide = oxide * (1 - (1 - washed)^2.8)
+    end
+    return oxide, rustNotes[i]
+  end
   if next(output.rust) and trails > 0 and (not runoffWater or rainStrength * rainDuration > 0) then
     local visibility = runoffWater and (0.58 + 0.42 * rainStrength ^ 0.72) or 1
-    local stainAt = Streaks.sampler(width, height, heights, footprint,
-      params.seamless == true, function(x, y)
-        local i = y * width + x + 1
-        local oxide = ((output.rust[i] or 0) >> 24) / 255
-        if runoffWater and oxide > 0 then
-          local flow, retained, exposure = runoffWater(x, y)
-          local washed = max(flow, retained * 0.72, exposure * rainStrength * 0.36)
-          oxide = oxide * (1 - (1 - washed)^2.8)
-        end
-        return oxide, rustNotes[i]
-      end, {
+    local stainAt = Streaks.sampler(width, height, terrain, footprint,
+      seamless, function(x, y) return dissolvedRust(runoffWater, x, y) end, {
         strength = trails * visibility * 100, seed = seedFor(params),
         -- A longer shower sustains the carrier farther downstream.
         scale = runoffWater and (2 + 22 * rainDuration) or nil,
         wrapY = not runoffWater,
+        routes = runoffRoutes,
       })
     -- Walk in row order because the rain transport sampler builds rows lazily.
     for i = 1, width * height do
@@ -437,40 +515,19 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
     end
   end
 
-  for _, stage in ipairs(stages) do
-    local strength = percent(params, stage.key)
-    local field = layerVariant(width, height, params, surface, footprint, stage, strength)
-    if field then
-      local sample = Effects.sampler(stage.style, Colors.get(palette, stage.key))
-      local stageRelief = output.relief[stage.key]
-      for i, source in pairs(base) do
-        if field[i] and field[i] > 0 then
-          local dr, dg, db, sampleAlpha, relief = sample(field[i])
-          local r, g, b, sourceAlpha = rgba(source)
-          local x, y = (i - 1) % width, (i - 1) // width
-          local wet = 1
-          if waterAt and stage.key ~= "soot" then
-            local flow, retained = waterAt(x, y)
-            wet = stage.key == "moss" and (0.35 + 1.35 * retained) or (0.55 + 1.05 * flow)
-          end
-          local alpha = byte((sampleAlpha or 0) * strength * sourceAlpha / 255 * wet * permission(masks, stage.key, i))
-          if alpha > 0 then
-            -- The sampled relief already includes the pigment alpha. Scale it by the emitted coverage.
-            if stageRelief and relief then stageRelief[i] = relief * alpha / sampleAlpha end
-            r, g, b = mixed(r, g, b, output.metal[i])
-            r, g, b = mixed(r, g, b, output.paint[i])
-            r, g, b = mixed(r, g, b, output.primer[i])
-            r, g, b = mixed(r, g, b, output.fading[i])
-            r, g, b = mixed(r, g, b, output.scuff[i])
-            r, g, b = mixed(r, g, b, output.rust[i])
-            r, g, b = mixed(r, g, b, output.trails[i])
-            if stage.key ~= "dirt" then r, g, b = mixed(r, g, b, output.dirt[i]) end
-            if stage.key == "soot" then r, g, b = mixed(r, g, b, output.moss[i]) end
-            dr, dg, db = Lighting.tint(dr, dg, db, r, g, b, alpha / 255, context(x, y), 75)
-            output[stage.key][i] = pixel(dr, dg, db, alpha)
-          end
-        end
-      end
+  shadeDeposits(base, output, width, context)
+  if params.captureRain then
+    local function trace(water, routes)
+      return {
+        width = width, height = height, seamless = seamless, waterAt = water, routeAt = routes,
+        rustAt = function(x, y) return trails * dissolvedRust(water, x, y) end,
+      }
+    end
+    if not runoffWater then runoffWater, runoffRoutes = storm(terrain) end
+    output.rain = trace(runoffWater, runoffRoutes)
+    if terrain ~= heights then
+      if not baseWaterAt then baseWaterAt, baseRouteAt = storm(heights) end
+      output.rain.base = trace(baseWaterAt, baseRouteAt)
     end
   end
   return output
