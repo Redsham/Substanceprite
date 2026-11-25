@@ -4,6 +4,10 @@ An Aseprite extension for procedural pixel-art materials. Add texture, wear, and
 
 ## Demos
 
+### Cargo container workflow
+
+![Cargo container workflow in Aseprite, from the base sprite and height map through paint, rust, rain, fittings, and lighting](docs/demo/cargo-container-workflow.gif)
+
 ### Materials
 
 ![Wood planks, stone, bare metal, and painted metal on sample sprites](docs/demo/materials.gif)
