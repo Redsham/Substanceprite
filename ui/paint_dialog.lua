@@ -5,6 +5,7 @@ local Live = require("lib.linked_live")
 local Native = require("lib.paint_native")
 local Paint = require("lib.paint_stack")
 local Colors = require("lib.paint_colors")
+local EffectDialog = require("ui.paint_effect_dialog")
 local PaletteUI = require("ui.paint_palette")
 local RainPreview = require("ui.rain_preview")
 
@@ -45,6 +46,7 @@ function DialogUI.open(site, providedContext)
   local existing = context.group ~= nil
   local initial = context.settings or defaults
   local palette = Colors.normalize(initial.palette)
+  local effectSettings = Paint.normalizeEffectSettings(initial.effectSettings)
   local function value(key)
     return (not existing and Paint.newWear[key]) or initial[key] or defaults[key]
   end
@@ -55,7 +57,7 @@ function DialogUI.open(site, providedContext)
   for _, group in ipairs(Native.list(sprite)) do groups[#groups + 1] = group end
   local heightOptions, heightLayers, preferredHeight = Common.surfaceSources(
     { sprite = sprite, layer = context.source, frame = context.frame }, groups)
-  local preview, timer, animation, status
+  local preview, timer, animation, status, effectEditor
   local rain = {elapsed = 0, playing = true}
   local rainEdited = false
   local dlg = Dialog{
@@ -72,7 +74,8 @@ function DialogUI.open(site, providedContext)
     local settings = {
       color = Aseprite.rgba(data.paintColor), opacity = data.opacity,
       seed = data.seed, seamless = data.seamless, palette = palette,
-      edgeWidth = data.edgeWidth, bevelWidth = data.bevelWidth, scuffDirection = data.scuffDirection,
+      edgeWidth = initial.edgeWidth, bevelWidth = initial.bevelWidth, scuffDirection = initial.scuffDirection,
+      effectSettings = effectSettings,
     }
     for _, slider in ipairs(wearSliders) do settings[slider.id] = data[slider.id] end
     for _, slider in ipairs(weatherSliders) do settings[slider.id] = data[slider.id] end
@@ -133,11 +136,40 @@ function DialogUI.open(site, providedContext)
     end
     dlg:modify{ id = "apply", enabled = preview ~= nil }
     dlg:repaint()
+    if effectEditor then effectEditor:repaint() end
   end
 
   local function schedule()
     timer:stop()
     timer:start()
+  end
+
+  local function openEffect(effect)
+    local settings = read()
+    local values = Paint.effectValues(settings, effect.id)
+    settings.effectSettings = nil
+    effectEditor = EffectDialog.create{
+      parent = dlg, name = effect.label, specs = Paint.effectControls[effect.id],
+      values = values, amount = settings[effect.id], saved = effectSettings[effect.id],
+      fallback = Paint.effectValues(settings, effect.id), preview = function() return preview end,
+      changed = function(pattern, amount)
+        effectSettings[effect.id] = pattern
+        dlg:modify{ id = effect.id, value = amount }
+        schedule()
+      end,
+      closed = function() effectEditor = nil end,
+    }
+    effectEditor:show{ autoscrollbars = true }
+  end
+
+  local function addEffects(effects)
+    for _, effect in ipairs(effects) do
+      dlg:slider{ id = effect.id, label = effect.label, min = effect.min, max = effect.max,
+        value = value(effect.id), onchange = schedule }
+      dlg:samerow()
+      dlg:button{ id = effect.id .. "Settings", text = "Settings…", hexpand = false,
+        onclick = function() openEffect(effect) end }
+    end
   end
 
   local function changeTarget()
@@ -203,29 +235,20 @@ function DialogUI.open(site, providedContext)
   end
 
   dlg:tab{ id = "wearTab", text = "Wear" }
-  local values = {}
-  for _, slider in ipairs(wearSliders) do values[slider.id] = value(slider.id) end
-  Common.addSliders(dlg, wearSliders, values, schedule)
+  addEffects(wearSliders)
   dlg:label{ text = "Bevel Wear uses the Height Map. Set it to 0 to turn it off." }
   dlg:check{ id = "wearAdvanced", text = "Pattern Options", onclick = function()
-    for _, id in ipairs({"bevelWidth", "edgeWidth", "scuffDirection", "seed", "seamless"}) do
+    for _, id in ipairs({"seed", "seamless"}) do
       dlg:modify{ id = id, visible = dlg.data.wearAdvanced }
     end
   end }
-  dlg:slider{ id = "bevelWidth", label = "Bevel Width (px)", min = 1, max = 6,
-    value = initial.bevelWidth or defaults.bevelWidth, visible = false, onchange = schedule }
-  dlg:slider{ id = "edgeWidth", label = "Edge Width (px)", min = 1, max = 6,
-    value = initial.edgeWidth or defaults.edgeWidth, visible = false, onchange = schedule }
-  dlg:combobox{ id = "scuffDirection", label = "Scuff Direction", options = { "Auto", "Horizontal", "Vertical" },
-    option = initial.scuffDirection or defaults.scuffDirection, visible = false, onchange = schedule }
   dlg:number{ id = "seed", label = "Seed", text = tostring(initial.seed or defaults.seed),
     decimals = 0, visible = false, onchange = schedule }
   dlg:check{ id = "seamless", text = "Seamless", selected = initial.seamless == true,
     visible = false, onclick = schedule }
 
   dlg:tab{ id = "weatheringTab", text = "Weathering" }
-  for _, slider in ipairs(weatherSliders) do values[slider.id] = value(slider.id) end
-  Common.addSliders(dlg, weatherSliders, values, schedule)
+  addEffects(weatherSliders)
   dlg:check{ id = "rainOptions", text = "Rain Settings", onclick = function()
     for _, slider in ipairs(rainSliders) do dlg:modify{ id = slider.id, visible = dlg.data.rainOptions } end
   end }

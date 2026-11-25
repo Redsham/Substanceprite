@@ -87,10 +87,12 @@ After clicking **Apply Lighting**, you can reopen **Lighting…** from any layer
 
 Select a metal layer in an RGB sprite and open **Sprite → Substanceprite → Paint & Wear…**, or click **Paint Existing Metal…** in **Material**. In **Paint**, choose the coating color and coverage. The paint follows the shading of the original sprite.
 
-- **Wear** controls **Chips**, **Bevel Wear**, **Edge Wear**, **Scuffs**, and **Fading**. Find **Bevel Width (px)**, edge width, scuff direction, and Seed under **Pattern Options**.
+- **Wear** controls **Chips**, **Bevel Wear**, **Edge Wear**, **Scuffs**, and **Fading**. **Pattern Options** contains the shared Seed and seamless setting.
 - **Weathering** adds rust on exposed metal, runoff streaks, dirt, moss, and soot. **Rain Settings** controls rain strength and duration. Water runs downward, goes around patches of buildup, and collects against rises. Rust streaks carry pigment along the same routes.
 - **Colors** sets shadow, midtone, and highlight colors for primer, scuffs, fading, and deposits. For a three-color paint ramp, select **Paint → Use Custom Paint Ramp**. **Tint Exposed Metal** controls the color of exposed steel.
 - **Maps & Masks** opens the editable metal map, height map, and individual effect masks. Select a map layer and edit it with the brush. White exposes steel on the metal map and marks raised areas on the height map. Click **Show Result** when finished.
+
+Click **Settings…** beside any effect in **Wear** or **Weathering** for its own controls and live preview. For example, the **Chips** dialog adjusts size, clustering, and softness, **Rust on Metal** adjusts the oxide pattern, and **Rust Trails** adjusts length and breakup. Use the width controls in **Bevel Wear** and **Edge Wear** and the direction control in **Scuffs**. **Reset Pattern** restores the pattern defaults for the open effect. **OK** keeps your changes in the editor until you apply or update the painted material.
 
 Dirt and moss build up a shallow surface. Use **Preview → Weathered Height** to see the combined height. Lighting and Prop Details that use the painted material's **Height Map** pick up the buildup after **Update Material**. The editable height map stays available for sculpting the base surface.
 
@@ -98,7 +100,7 @@ Choose **Preview → Rain Flow** to see drops move over the artwork. Blue partic
 
 #### Bevel wear
 
-Choose a height map under **Maps & Masks → Initial Height** when painting a new material. On an existing painted material, adjust the saved map with **Edit Height Map**. Raise **Wear → Bevel Wear** to expose the original steel along convex bevels and raised shoulders. **Preview → Bevel Coverage** shows where paint will be removed. **Bevel Width (px)** lets the wear extend onto the raised face.
+Choose a height map under **Maps & Masks → Initial Height** when painting a new material. On an existing painted material, adjust the saved map with **Edit Height Map**. Raise **Wear → Bevel Wear** to expose the original steel along convex bevels and raised shoulders. **Preview → Bevel Coverage** shows where paint will be removed. Open **Settings…** next to **Bevel Wear** to adjust how far it extends onto the raised face.
 
 **Bevel Wear** starts at `0` (off) and keeps the original shading. **Weathering → Rust on Metal** adds patches of oxide to exposed bevels as rain runs over them or collects against the relief. **Rain Strength** and **Rain Duration** control how much new oxide develops. Set either rain control to `0` for clean, freshly worn bevels. With **Rust Trails** enabled, rain carries pigment from rusty bevels onto the coating below. Use the **Bevel Wear** effect mask to protect parts of the surface.
 

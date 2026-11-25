@@ -13,6 +13,7 @@ local Paint = {}
 Paint.defaults = {
   color = {r = 99, g = 124, b = 102, a = 255},
   palette = {},
+  effectSettings = {},
   opacity = 100, chips = 38, corrosion = 68, trails = 0, dirt = 0, moss = 0, soot = 0,
   edgeWear = Wear.defaults.edgeWear, edgeWidth = Wear.defaults.edgeWidth,
   bevelWear = Wear.defaults.bevelWear, bevelWidth = Wear.defaults.bevelWidth,
@@ -24,7 +25,7 @@ Paint.defaults = {
 
 Paint.newWear = { chips = 32, edgeWear = 46, scuffs = 29, fading = 24, corrosion = 73 }
 
-local floor, min, max = math.floor, math.min, math.max
+local abs, floor, min, max = math.abs, math.floor, math.min, math.max
 local stages = {
   {key = "dirt", style = "Dirt", seedOffset = 473, edge = 6, bottom = 32, scale = 5},
   {key = "moss", style = "Moss", seedOffset = 977, edge = 22, bottom = 12, scale = 4},
@@ -39,6 +40,98 @@ local function number(value, fallback, low, high)
   value = tonumber(value)
   if not value or value ~= value then value = fallback end
   return clamp(value, low, high)
+end
+
+local function slider(id, label, default, minimum, maximum, legacy)
+  return {id = id, label = label, default = default, min = minimum, max = maximum, legacy = legacy}
+end
+
+local function scale(default) return slider("scale", "Size", default, 1, 64) end
+local function patchScale() return slider("scale", "Patch Size (%)", 100, 25, 300) end
+local function clustering(default) return slider("clustering", "Clustering", default, 0, 100) end
+
+Paint.effectControls = {
+  chips = {
+    scale(Chips.defaults.scale), clustering(Chips.defaults.clustering),
+    slider("softness", "Softness", Chips.defaults.softness, 0, 100),
+    slider("edge", "Edge Bias", 30, 0, 100), slider("bottom", "Bottom Bias", 0, 0, 100),
+  },
+  edgeWear = {
+    slider("width", "Edge Width (px)", Wear.defaults.edgeWidth, 1, 6, "edgeWidth"),
+    patchScale(), clustering(50),
+  },
+  bevelWear = {
+    slider("width", "Bevel Width (px)", Wear.defaults.bevelWidth, 1, 6, "bevelWidth"),
+    patchScale(), clustering(50),
+  },
+  scuffs = {
+    {id = "direction", label = "Direction", options = {"Auto", "Horizontal", "Vertical"},
+      default = Wear.defaults.scuffDirection, legacy = "scuffDirection"},
+    slider("scale", "Stroke Size (%)", 100, 25, 300),
+    slider("width", "Stroke Width (%)", 100, 35, 240), clustering(50),
+  },
+  fading = {patchScale(), clustering(50)},
+  corrosion = {
+    scale(4), clustering(Texture.defaults.clustering),
+    slider("density", "Density", 88, 0, 100),
+    slider("softness", "Softness", Texture.defaultRustSoftness, 0, 100),
+  },
+  trails = {
+    slider("length", "Trail Length (%)", 100, 20, 240),
+    slider("breakup", "Breakup", 50, 0, 100),
+  },
+}
+
+for _, stage in ipairs(stages) do
+  local controls = {
+    scale(stage.scale), clustering(67), slider("density", "Density (%)", 100, 0, 200),
+    slider("intensity", "Intensity", 72, 0, 100),
+    slider("edge", "Edge Bias", stage.edge, 0, 100), slider("bottom", "Bottom Bias", stage.bottom, 0, 100),
+  }
+  if Texture.isSoftDeposit(stage.style) then
+    controls[#controls + 1] = slider("softness", "Softness", Texture.defaultSoftness(stage.style), 0, 100)
+    controls[#controls + 1] = slider("runoff", stage.key == "moss" and "Moisture" or "Runoff",
+      Texture.defaultRunoff(stage.style), 0, 100)
+  end
+  Paint.effectControls[stage.key] = controls
+end
+
+local function effectValue(control, value)
+  if control.options then
+    for _, option in ipairs(control.options) do
+      if value == option then return value end
+    end
+    return nil
+  end
+  value = tonumber(value)
+  if value == nil or value ~= value then return nil end
+  return floor(clamp(value, control.min, control.max) + 0.5)
+end
+
+function Paint.normalizeEffectSettings(settings)
+  local result = {}
+  if type(settings) ~= "table" then return result end
+  for key, controls in pairs(Paint.effectControls) do
+    local source = settings[key]
+    if type(source) == "table" then
+      local stage = {}
+      for _, control in ipairs(controls) do stage[control.id] = effectValue(control, source[control.id]) end
+      if next(stage) then result[key] = stage end
+    end
+  end
+  return result
+end
+
+function Paint.effectValues(params, key)
+  params = params or {}
+  local settings = params.effectSettings
+  local values = type(settings) == "table" and settings[key]
+  local result = {}
+  for _, control in ipairs(Paint.effectControls[key] or {}) do
+    local resolved = type(values) == "table" and effectValue(control, values[control.id])
+    result[control.id] = resolved or control.legacy and effectValue(control, params[control.legacy]) or control.default
+  end
+  return result
 end
 
 local function percent(options, field)
@@ -107,8 +200,11 @@ end
 
 function Paint.generate(width, height, params, mask)
   params = params or {}
+  local chips = Paint.effectValues(params, "chips")
   local controls = {
-    density = percent(params, "chips") * 100, intensity = 100, edge = 30,
+    density = percent(params, "chips") * 100, intensity = 100,
+    scale = chips.scale, clustering = chips.clustering, softness = chips.softness,
+    edge = chips.edge, bottom = chips.bottom,
     seed = seedFor(params), seamless = params.seamless == true, surface = surfaceFor(params),
     runoff = 100,
   }
@@ -117,7 +213,10 @@ function Paint.generate(width, height, params, mask)
       and percent(params, "fading") == 0 then
     return generated
   end
-  local wear = Wear.generate(width, height, params, mask)
+  local wear = Wear.generate(width, height, params, mask, {
+    edgeWear = Paint.effectValues(params, "edgeWear"), bevelWear = Paint.effectValues(params, "bevelWear"),
+    scuffs = Paint.effectValues(params, "scuffs"), fading = Paint.effectValues(params, "fading"),
+  })
   generated.wear = wear
   if percent(params, "edgeWear") > 0 then
     generated.unwornChips, generated.chips = generated.chips, {}
@@ -130,10 +229,14 @@ end
 
 local function layerVariant(width, height, params, surface, footprint, stage, strength)
   if strength == 0 then return nil end
+  local controls = Paint.effectValues(params, stage.key)
+  local density = 24 + strength * 76
+  if controls.density ~= 100 then density = min(100, density * controls.density / 100) end
   return Effects.generator(stage.style)(width, height, {
     style = stage.style, seed = seedFor(params, stage.seedOffset), seamless = params.seamless == true,
-    scale = stage.scale, density = 24 + strength * 76, intensity = 72,
-    clustering = 67, edge = stage.edge, bottom = stage.bottom, surface = surface,
+    scale = controls.scale, density = density,
+    intensity = controls.intensity, clustering = controls.clustering, edge = controls.edge,
+    bottom = controls.bottom, softness = controls.softness, runoff = controls.runoff, surface = surface,
   }, footprint)
 end
 
@@ -335,13 +438,21 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
   local sourceColor = params.color or Paint.defaults.color
   local coat = percent(params, "opacity") * number(sourceColor.a, 255, 0, 255) / 255
   local corrosion = percent(params, "corrosion")
+  local rustControls = Paint.effectValues(params, "corrosion")
+  local rustVariation = 0
+  for _, control in ipairs(Paint.effectControls.corrosion) do
+    local range = control.id == "scale" and 6 or 45
+    rustVariation = max(rustVariation, min(1, abs(rustControls[control.id] - control.default) / range))
+  end
+  local rustDensity = min(1, rustControls.density / 88)
   local tint = tintFrom(sourceColor)
   local context = Lighting.sampler(width, height, baseAt, footprint, params.seamless == true)
   local rustNotes = {}
   local chipRustField, bevelRustField
   local function rustField(guide)
     return Effects.generator("Rust")(width, height, {
-      style = "Rust", density = 88, scale = 4, intensity = 64,
+      style = "Rust", density = rustControls.density, scale = rustControls.scale, intensity = 64,
+      clustering = rustControls.clustering, softness = rustControls.softness,
       seed = seedFor(params, 235), seamless = params.seamless == true, surface = guide,
     }, footprint)
   end
@@ -409,6 +520,14 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
           local extra = authored and (0.40 + 0.60 * aged) or (0.13 + 0.56 * aged)
           oxide, tone = max(oxide, extra), rustTone > 0 and rustTone or max(tone, 96)
         end
+        if rustVariation > 0 and chips > 0 then
+          -- Keep the same cut and vary only the oxide deposited inside it.
+          bevelRustField = bevelRustField or rustField()
+          local sample = bevelRustField[i] or 0
+          local grain, rustTone = (sample & 255) / 255, (sample >> 8) & 255
+          oxide = min(1, oxide * rustDensity * (1 + (1.65 * grain - 0.73) * rustVariation))
+          if grain > 0 then tone = byte(tone + (rustTone - tone) * 0.58 * rustVariation) end
+        end
         local savedR, savedG, savedB, savedAlpha
         if rustAt then savedR, savedG, savedB, savedAlpha = rustAt(x, y) end
         local savedCoverage = savedR and number(savedAlpha, 255, 0, 255) / 255 or 0
@@ -416,7 +535,7 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
         local remembered = savedCoverage * chipWeight
         local added = oxide * (1 - savedCoverage) * chipWeight
         local bevelOxide = 0
-        if bevelShare > 0 and stormAge > 0 then
+        if bevelShare > 0 and stormAge > 0 and rustControls.density > 0 then
           if not bevelWaterAt then bevelWaterAt, bevelRouteAt = storm(terrain) end
           local flow, retained, exposure = bevelWaterAt(x, y)
           -- A passing film contributes less than water held against a lip.
@@ -479,11 +598,13 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
   end
   if next(output.rust) and trails > 0 and (not runoffWater or rainStrength * rainDuration > 0) then
     local visibility = runoffWater and (0.58 + 0.42 * rainStrength ^ 0.72) or 1
+    local trailControls = Paint.effectValues(params, "trails")
     local stainAt = Streaks.sampler(width, height, terrain, footprint,
       seamless, function(x, y) return dissolvedRust(runoffWater, x, y) end, {
         strength = trails * visibility * 100, seed = seedFor(params),
         -- A longer shower sustains the carrier farther downstream.
         scale = runoffWater and (2 + 22 * rainDuration) or nil,
+        length = trailControls.length, breakup = trailControls.breakup,
         wrapY = not runoffWater,
         routes = runoffRoutes,
       })

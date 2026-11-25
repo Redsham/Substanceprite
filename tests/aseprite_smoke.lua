@@ -943,4 +943,69 @@ local function checkBevelWear()
 end
 
 checkBevelWear()
-print("19/19 Aseprite integration checks passed")
+
+local function checkPaintEffectSettings()
+  local Paint = require("lib.paint_native")
+  local Stack = require("lib.paint_stack")
+  local px = app.pixelColor
+  local width, height = 64, 43
+  local sprite = Sprite(width, height, ColorMode.RGB)
+  local source = sprite.layers[1]
+  local image = Image(sprite.spec)
+  image:clear(px.rgba(115, 127, 132, 255))
+  sprite:newCel(source, 1, image, Point(0, 0))
+  local site = {sprite = sprite, layer = source, frame = sprite.frames[1]}
+  local group = assert(Paint.apply(assert(Paint.context(site)), {
+    chips = 88, edgeWear = 0, edgeWidth = 5, corrosion = 100, moss = 60, seed = 315,
+  }))
+  local function reopen() return assert(Paint.context{sprite = sprite, layer = group, frame = 1}) end
+  local layers = assert(Paint.layers(group))
+  local baselineCel, metalCel = layers.metalBaseline:cel(1), layers.metalMap:cel(1)
+  local originalBaseline, heightBytes = baselineCel.image.bytes, layers.heightMap:cel(1).image.bytes
+  local manualX, manualY
+  for y = 0, height - 1 do
+    for x = 0, width - 1 do
+      if not manualX and px.rgbaR(metalCel.image:getPixel(x, y)) < 200 then manualX, manualY = x, y end
+    end
+  end
+  assert(manualX)
+  local white = px.rgba(255, 255, 255, 255)
+  local authored = Image(metalCel.image)
+  authored:putPixel(manualX, manualY, white)
+  app.transaction("Draw an independent chip", function() metalCel.image = authored end)
+  equal(Stack.effectValues(reopen().settings, "edgeWear").width, 5, "existing edge width still resolves")
+  local tuned = {chips = {scale = 13, clustering = 20}, edgeWear = {width = 2},
+    corrosion = {scale = 11, clustering = 74}, moss = {scale = 12, clustering = 82}}
+  assert(Paint.apply(reopen(), {effectSettings = tuned}) == group)
+  assert(baselineCel.image.bytes ~= originalBaseline, "chip size rebakes the procedural metal baseline")
+  equal(metalCel.image:getPixel(manualX, manualY), white, "retuning chips retains authored exposure")
+  equal(layers.heightMap:cel(1).image.bytes, heightBytes, "retuning effects keeps authored relief")
+  local function checkTuned()
+    local values = reopen().settings
+    equal(values.effectSettings.chips.scale, 13, "chip size persists")
+    equal(values.effectSettings.corrosion.clustering, 74, "rust clustering persists")
+    equal(values.effectSettings.moss.scale, 12, "moss size persists independently")
+    equal(Stack.effectValues(values, "edgeWear").width, 2, "explicit reset overrides the older width")
+  end
+  checkTuned()
+  app.undo()
+  equal(baselineCel.image.bytes, originalBaseline, "Undo restores procedural chips")
+  equal(metalCel.image.bytes, authored.bytes, "Undo retains the previous manual exposure")
+  assert(next(reopen().settings.effectSettings) == nil)
+  assert(Paint.apply(reopen(), {effectSettings = tuned}))
+  assert(Paint.apply(reopen(), {opacity = 90}))
+  checkTuned()
+  local destination = app.params["paint-effects-file"]
+  if destination then
+    assert(sprite:saveAs(destination))
+    sprite:close()
+    sprite = assert(app.open(destination))
+    group = assert(Paint.list(sprite)[1])
+    checkTuned()
+  end
+  sprite:close()
+  print("PASS separate paint effect controls retain their settings, authored maps, and Undo")
+end
+
+checkPaintEffectSettings()
+print("20/20 Aseprite integration checks passed")

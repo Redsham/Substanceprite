@@ -201,11 +201,13 @@ local function stroke(buffer, tones, along, across, halfLength, halfWidth, slant
   end
 end
 
-local function scuffGroups(width, height, vertical, seamless, seed, amount)
+local function scuffGroups(width, height, vertical, seamless, seed, amount, options)
   local primary, secondary = width, height
   if vertical then primary, secondary = height, width end
-  local columns = max(1, floor(primary / 23 + 0.5))
-  local rows = max(1, floor(secondary / 10 + 0.5))
+  local scale, strokeWidth = (options.scale or 100) / 100, (options.width or 100) / 100
+  local clustering = (options.clustering or 50) / 100 - 0.5
+  local columns = max(1, floor(primary / (23 * scale) + 0.5))
+  local rows = max(1, floor(secondary / (10 * scale) + 0.5))
   local alongCell, acrossCell = primary / columns, secondary / rows
   local buffer, tones = {}, {}
   local function tile(u, v)
@@ -226,14 +228,14 @@ local function scuffGroups(width, height, vertical, seamless, seed, amount)
         local angle = (variation(811) - 0.5) * 0.17
         local bend = variation(613) * 0.82 - 0.41
         local strength = activity * (0.26 + 0.74 * amount)
-        stroke(buffer, tones, u, v, length * 1.08, max(0.75, fan * 0.88), angle, bend,
+        stroke(buffer, tones, u, v, length * 1.08, max(0.75, fan * 0.88) * strokeWidth, angle, bend,
           strength * 0.31, 0.51, tile)
-        for mark = 0, 2 + floor(variation(393) * 2) do
+        for mark = 0, 2 + floor(variation(393) * 2 + clustering * 3) do
           local offset = mark * 37
           local side = mark == 0 and 0 or (variation(591 + offset) - 0.5) * 2 * fan
           local start = (variation(637 + offset) - 0.5) * length * 0.70
           local extent = length * (0.43 + 0.53 * variation(747 + offset))
-          local thickness = 0.28 + 0.44 * variation(872 + offset)
+          local thickness = (0.28 + 0.44 * variation(872 + offset)) * strokeWidth
           local shadow = variation(245 + offset)
           stroke(buffer, tones, u + start, v + side, extent, thickness, angle, bend,
             strength * (0.54 + 0.40 * shadow), 0.60 + 0.30 * shadow, tile)
@@ -257,7 +259,7 @@ end
 
 -- All channels are dense bytes in row-major order. The caller combines edge
 -- and bevel wear with chip geometry. Scuffs and fading leave metal covered.
-function Wear.generate(width, height, params, mask)
+function Wear.generate(width, height, params, mask, effects)
   local wear = { edge = {}, bevel = {}, scuff = {}, fading = {}, scuffTones = {}, fadingTones = {} }
   width, height = floor(width), floor(height)
   if width < 1 or height < 1 then return wear end
@@ -275,37 +277,47 @@ function Wear.generate(width, height, params, mask)
     return wear
   end
 
-  local reach = floor(number(params.edgeWidth, Wear.defaults.edgeWidth, 1, 6) + 0.5)
-  local bevelWidth = floor(number(params.bevelWidth, Wear.defaults.bevelWidth, 1, 6) + 0.5)
+  effects = effects or {}
+  local edgeOptions, bevelOptions = effects.edgeWear or {}, effects.bevelWear or {}
+  local scuffOptions, fadeOptions = effects.scuffs or {}, effects.fading or {}
+  local reach = floor(number(edgeOptions.width or params.edgeWidth, Wear.defaults.edgeWidth, 1, 6) + 0.5)
+  local bevelWidth = floor(number(bevelOptions.width or params.bevelWidth, Wear.defaults.bevelWidth, 1, 6) + 0.5)
   local seed = floor(number(params.seed, 1, -2147483648, 4294967295))
   local seamless = params.seamless == true
   local at, relief = readers(width, height, mask, heights, seamless)
 
   local rubX, rubY, rough
   if edge > 0 then
-    rubX = field(width, height, 10, 2.5, seed + 771, seamless)
-    rubY = field(width, height, 2.5, 10, seed + 771, seamless)
-    rough = field(width, height, 2.0, 2.0, seed + 149, seamless)
+    local scale = (edgeOptions.scale or 100) / 100
+    rubX = field(width, height, 10 * scale, 2.5 * scale, seed + 771, seamless)
+    rubY = field(width, height, 2.5 * scale, 10 * scale, seed + 771, seamless)
+    rough = field(width, height, 2.0 * scale, 2.0 * scale, seed + 149, seamless)
   end
   local bevelContact, bevelPatches
   if bevel > 0 then
     local shoulders = bevelShoulders(width, height, at, relief)
     if next(shoulders) then
       bevelContact = widenBevel(shoulders, width, bevelWidth, at, relief)
-      bevelPatches = field(width, height, 8, 8, seed + 419, seamless)
+      local scale = (bevelOptions.scale or 100) / 100
+      bevelPatches = field(width, height, 8 * scale, 8 * scale, seed + 419, seamless)
     end
   end
   local scuffCoverage, scuffPigment
   if scuff > 0 then
-    local vertical = params.scuffDirection == "Vertical"
-      or (params.scuffDirection ~= "Horizontal" and height > width)
-    scuffCoverage, scuffPigment = scuffGroups(width, height, vertical, seamless, seed, scuff)
+    local direction = scuffOptions.direction or params.scuffDirection
+    local vertical = direction == "Vertical" or (direction ~= "Horizontal" and height > width)
+    scuffCoverage, scuffPigment = scuffGroups(width, height, vertical, seamless, seed, scuff, scuffOptions)
   end
   local chalk, chalkFine
   if fade > 0 then
-    chalk = field(width, height, 25, 19, seed + 526, seamless)
-    chalkFine = field(width, height, 6, 6, seed + 236, seamless)
+    local scale = (fadeOptions.scale or 100) / 100
+    chalk = field(width, height, 25 * scale, 19 * scale, seed + 526, seamless)
+    chalkFine = field(width, height, 6 * scale, 6 * scale, seed + 236, seamless)
   end
+
+  local edgeCluster = ((edgeOptions.clustering or 50) - 50) / 100 * 0.26
+  local bevelCluster = ((bevelOptions.clustering or 50) - 50) / 100 * 0.14
+  local fadeCluster = ((fadeOptions.clustering or 50) - 50) / 100 * 0.22
 
   for y = 0, height - 1 do
     for x = 0, width - 1 do
@@ -316,14 +328,14 @@ function Wear.generate(width, height, params, mask)
         if rubX then
           local tangentX, tangentY = edgeAt(x, y, i, reach, at, relief)
           if tangentX > 0 or tangentY > 0 then
-            local texture = 0.19 * rough(x, y)
-            local alongX = contactWidth(tangentX, 0.81 * rubX(x, y) + texture, edge)
-            local alongY = contactWidth(tangentY, 0.81 * rubY(x, y) + texture, edge)
+            local texture = (0.19 - edgeCluster) * rough(x, y)
+            local alongX = contactWidth(tangentX, (0.81 + edgeCluster) * rubX(x, y) + texture, edge)
+            local alongY = contactWidth(tangentY, (0.81 + edgeCluster) * rubY(x, y) + texture, edge)
             rubbed = byte(max(alongX, alongY) * (0.31 + 0.69 * edge))
           end
         end
         if bevelContact and bevelContact[i] then
-          local patch = 0.91 * bevelPatches(x, y) + 0.09 * hash(x, y, seed + 173)
+          local patch = (0.91 + bevelCluster) * bevelPatches(x, y) + (0.09 - bevelCluster) * hash(x, y, seed + 173)
           local coverage = smooth((patch - 0.74 + 0.60 * bevel) / 0.36)
           exposed = byte(bevelContact[i] * coverage * bevel)
         end
@@ -339,7 +351,7 @@ function Wear.generate(width, height, params, mask)
           if brushed > 0 then scuffTone = scuffPigment[i] end
         end
         if chalk then
-          local cloud = 0.87 * chalk(x, y) + 0.13 * chalkFine(x, y)
+          local cloud = (0.87 + fadeCluster) * chalk(x, y) + (0.13 - fadeCluster) * chalkFine(x, y)
             + weatherExposure(x, y, i, height, seamless, at, relief)
           local exposure = smooth((cloud - 0.67 + 0.34 * fade) / 0.39)
           bleached = byte(exposure * (0.37 + 0.63 * fade))

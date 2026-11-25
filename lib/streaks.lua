@@ -37,6 +37,9 @@ function Streaks.sampler(width, height, heights, mask, seamless, sourceAt, optio
   local routes = type(options.routes) == "function" and options.routes or nil
   local guide = type(heights) == "table" and heights or nil
   local decay = 0.69 + 0.18 * unit((scale - 1) / 18)
+  local length = option(options.length, 100, 20, 240) / 100
+  if length ~= 1 then decay = decay ^ (1 / length) end
+  local breakup = option(options.breakup, 50, 0, 100) / 50
   local epsilon = 0.00015
   local wrapY = seamless and options.wrapY ~= false
   local warmup = wrapY and math.ceil(math.log(epsilon * 0.001) / math.log(decay)) or 0
@@ -130,6 +133,7 @@ function Streaks.sampler(width, height, heights, mask, seamless, sourceAt, optio
         if total == 0 and (ahead or left or right) then pooling = max(pooling, 0.75) end
         if y >= 0 and received >= epsilon then
           local variation = 0.87 + 0.26 * grain(x, h, seed)
+          if breakup ~= 1 then variation = 1 + (variation - 1) * breakup ^ 2 end
           local stain = strength * variation * (0.62 + 0.55 * pooling) * received / (1 + 0.52 * received)
           output[i] = unit(stain)
           output[i + 1] = unit(incoming[i + 1] / received - 0.17 * pooling)

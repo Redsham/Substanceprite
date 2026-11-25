@@ -31,6 +31,123 @@ local function layerCoverage(pixels, width)
 end
 
 return function(test)
+  test("explicit effect defaults preserve legacy paint, wear, and weathering", function()
+    local width, height = 54, 39
+    local size, heights = width * height, {}
+    for i = 1, size do
+      local x, y = (i - 1) % width, (i - 1) // width
+      heights[i] = x >= 14 and x <= 28 and y <= 25 and 0.88 or 0.32
+    end
+    local function base(x, y) return 92 + y, 106 + x, 124, 255 end
+    local params = {chips = 64, edgeWear = 60, edgeWidth = 3, bevelWear = 85, bevelWidth = 2,
+      scuffs = 68, scuffDirection = "Vertical", fading = 79, corrosion = 80, trails = 75,
+      dirt = 83, moss = 80, soot = 74, rainStrength = 82, rainDuration = 73, seed = 219, heights = heights}
+    local legacy = Paint.render(width, height, params, nil, base)
+    local effects = {}
+    for key in pairs(Paint.effectControls) do effects[key] = Paint.effectValues(params, key) end
+    params.effectSettings = effects
+    local explicit = Paint.render(width, height, params, nil, base)
+    for _, key in ipairs({"metal", "paint", "bevel", "primer", "scuff", "fading", "rust", "trails", "dirt", "moss", "soot"}) do
+      assert(arrayEqual(legacy[key], explicit[key], size), key .. " changed with explicit defaults")
+    end
+    assert(arrayEqual(legacy.weatherHeights, explicit.weatherHeights, size))
+    local normalized = Paint.normalizeEffectSettings({chips = {scale = 100, clustering = 0, extra = 23},
+      scuffs = {direction = "unknown"}, rust = true, moss = {scale = 0 / 0}})
+    assert(normalized.chips.scale == 64 and normalized.chips.clustering == 0 and normalized.chips.extra == nil)
+    assert(normalized.scuffs == nil and normalized.rust == nil and normalized.moss == nil)
+  end)
+
+  test("wear pattern controls only change the selected damage generator", function()
+    local width, height = 71, 52
+    local size, heights = width * height, {}
+    for i = 1, size do
+      local x, y = (i - 1) % width, (i - 1) // width
+      heights[i] = x >= 15 and x <= 39 and y >= 7 and y <= 36 and 0.91 or 0.29
+    end
+    local params = {chips = 85, edgeWear = 85, bevelWear = 100, scuffs = 100,
+      fading = 100, seed = 219, heights = heights}
+    local controls = {
+      {key = "chips", field = "scale", value = 13, channel = "chips"},
+      {key = "chips", field = "clustering", value = 15, channel = "chips"},
+      {key = "edgeWear", field = "width", value = 5, channel = "edge"},
+      {key = "edgeWear", field = "clustering", value = 90, channel = "edge"},
+      {key = "bevelWear", field = "width", value = 5, channel = "bevel"},
+      {key = "bevelWear", field = "clustering", value = 90, channel = "bevel"},
+      {key = "scuffs", field = "direction", value = "Vertical", channel = "scuff"},
+      {key = "scuffs", field = "scale", value = 173, channel = "scuff"},
+      {key = "scuffs", field = "clustering", value = 90, channel = "scuff"},
+      {key = "fading", field = "scale", value = 173, channel = "fading"},
+      {key = "fading", field = "clustering", value = 90, channel = "fading"},
+    }
+    local function geometry(result)
+      return {chips = result.unwornChips, edge = result.wear.edge, bevel = result.wear.bevel,
+        scuff = result.wear.scuff, fading = result.wear.fading}
+    end
+    local baseline = geometry(Paint.generate(width, height, params))
+    for _, control in ipairs(controls) do
+      params.effectSettings = {[control.key] = {[control.field] = control.value}}
+      local changed = geometry(Paint.generate(width, height, params))
+      local repeatChange = geometry(Paint.generate(width, height, params))
+      for key in pairs(baseline) do
+        assert(arrayEqual(changed[key], repeatChange[key], size), key .. " is nondeterministic")
+        assert(arrayEqual(changed[key], baseline[key], size) == (key ~= control.channel),
+          control.key .. " " .. control.field .. " changed the wrong geometry for " .. key)
+      end
+    end
+  end)
+
+  test("rust, runoff, and deposit controls tune their own output geometry", function()
+    local width, height = 64, 52
+    local size, metal, heights = width * height, {}, {}
+    for i = 1, size do
+      local x, y = (i - 1) % width, (i - 1) // width
+      heights[i] = 0.47 + x % 9 * 0.012
+      if y >= 4 and y <= 13 and x >= 12 and x <= 51 then metal[i] = 255 end
+    end
+    local function base(x, y) return 101 + y, 113 + x, 126, 255 end
+    local params = {chips = 0, corrosion = 100, trails = 100, dirt = 72, moss = 83, soot = 100,
+      rainStrength = 87, rainDuration = 80, seed = 219, heights = heights}
+    local baseline = Paint.render(width, height, params, nil, base, nil, metal)
+    local controls = {
+      {key = "corrosion", field = "scale", value = 15, layer = "rust"},
+      {key = "corrosion", field = "clustering", value = 10, layer = "rust"},
+      {key = "trails", field = "length", value = 30, layer = "trails"},
+      {key = "dirt", field = "scale", value = 16, layer = "dirt"},
+      {key = "dirt", field = "clustering", value = 10, layer = "dirt"},
+      {key = "moss", field = "scale", value = 16, layer = "moss"},
+      {key = "soot", field = "scale", value = 16, layer = "soot"},
+    }
+    for _, control in ipairs(controls) do
+      params.effectSettings = {[control.key] = {[control.field] = control.value}}
+      local changed = Paint.render(width, height, params, nil, base, nil, metal)
+      assert(not arrayEqual(baseline[control.layer], changed[control.layer], size),
+        control.key .. " " .. control.field .. " did not change its layer")
+      assert(arrayEqual(baseline.paint, changed.paint, size), "weather settings changed the authored paint cut")
+      if control.key ~= "corrosion" then
+        assert(arrayEqual(baseline.rust, changed.rust, size), "downstream tuning changed oxide on the metal")
+      end
+      if control.key == "dirt" then
+        assert(arrayEqual(baseline.relief.moss, changed.relief.moss, size), "dirt tuning changed moss geometry")
+      elseif control.key == "moss" then
+        assert(arrayEqual(baseline.relief.dirt, changed.relief.dirt, size), "moss tuning changed dirt geometry")
+      end
+    end
+    params.soot = 0
+    local dormant = Paint.render(width, height, params, nil, base, nil, metal)
+    params.effectSettings = nil
+    local disabled = Paint.render(width, height, params, nil, base, nil, metal)
+    assert(not next(dormant.soot) and arrayEqual(dormant.rust, disabled.rust, size)
+      and arrayEqual(dormant.trails, disabled.trails, size))
+
+    params.chips = 85
+    local procedural = Paint.render(width, height, params, nil, base)
+    params.effectSettings = {corrosion = {scale = 15, clustering = 10}}
+    local tuned = Paint.render(width, height, params, nil, base)
+    assert(next(procedural.rust) and not arrayEqual(procedural.rust, tuned.rust, size),
+      "rust tuning also reaches procedural chips")
+    assert(arrayEqual(procedural.paint, tuned.paint, size), "rust tuning changed the procedural chip cut")
+  end)
+
   test("bevel coverage removes only the permitted paint and remains optional", function()
     local generated = {chips = {0, 0, 0, 192, 0}, rust = {0, 0, 0, 223, 0}, tones = {0, 0, 0, 155, 0},
       wear = {bevel = {255, 255, 140, 128, 255}}}

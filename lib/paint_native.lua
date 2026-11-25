@@ -270,6 +270,13 @@ local function makeTarget(site, area, allowed, read)
     alphaAt = function(x, y) return alpha[y * area.width + x + 1] or 0 end}
 end
 
+local function same(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then return a == b end
+  for key, value in pairs(a) do if not same(value, b[key]) then return false end end
+  for key in pairs(b) do if a[key] == nil then return false end end
+  return true
+end
+
 local function mergedRecipe(previous, settings)
   local recipe = {}
   for key, default in pairs(Paint.defaults) do
@@ -285,6 +292,7 @@ local function mergedRecipe(previous, settings)
   end
   recipe.color = {r = color.r, g = color.g, b = color.b, a = color.a or 255}
   recipe.palette = Colors.normalize(recipe.palette)
+  recipe.effectSettings = Paint.normalizeEffectSettings(recipe.effectSettings)
   return recipe
 end
 
@@ -427,7 +435,10 @@ local function prepare(context, settings, flags)
     local previous = context.settings
     regenerate = settings.regenerateMetal or recipe.chips ~= previous.chips
       or recipe.seed ~= previous.seed or recipe.seamless ~= previous.seamless
-      or recipe.edgeWear ~= previous.edgeWear or recipe.edgeWidth ~= previous.edgeWidth
+      or recipe.edgeWear ~= previous.edgeWear
+      or (recipe.chips > 0 and not same(Paint.effectValues(recipe, "chips"), Paint.effectValues(previous, "chips")))
+      or (recipe.edgeWear > 0
+        and not same(Paint.effectValues(recipe, "edgeWear"), Paint.effectValues(previous, "edgeWear")))
     if regenerate or recipe.edgeWear > 0 then
       local baselineChanged = false
       for index = 1, target.width * target.height do
@@ -548,13 +559,6 @@ local function outputImages(context, prepared)
     end
   end
   return result
-end
-
-local function same(a, b)
-  if type(a) ~= "table" or type(b) ~= "table" then return a == b end
-  for key, value in pairs(a) do if not same(value, b[key]) then return false end end
-  for key in pairs(b) do if a[key] == nil then return false end end
-  return true
 end
 
 local function replace(context, layer, image)

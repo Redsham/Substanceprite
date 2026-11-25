@@ -10,7 +10,7 @@ local modules = {
   "lib.rain", "lib.streaks", "lib.surface", "lib.texture", "lib.weather", "lib.workspace",
   "ui.alpha_library", "ui.common", "ui.detail_dialog", "ui.height_dialog", "ui.linked_dialog",
   "ui.material_layer", "ui.material_library", "ui.lighting_panel",
-  "ui.paint_dialog", "ui.paint_palette", "ui.rain_preview", "ui.material_dialog", "ui.ramp_dialog",
+  "ui.paint_dialog", "ui.paint_effect_dialog", "ui.paint_palette", "ui.rain_preview", "ui.material_dialog", "ui.ramp_dialog",
   "ui.scene_lighting_dialog", "ui.shadow_controls", "ui.texture_dialog",
 }
 
