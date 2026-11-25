@@ -131,6 +131,44 @@ return function(test)
     end
   end)
 
+  test("wood and metal avoid harsh seams in albedo and relief", function()
+    local width, height = 125, 120
+    local function largestDip(values, count)
+      local dip = 0
+      for i = 0, count - 1 do
+        local near = values[(i - 3) % count] + values[(i + 3) % count]
+        dip = math.max(dip, near / 2 - values[i])
+      end
+      return dip
+    end
+    for _, limits in ipairs({
+      { "Metal", 14, 14, 0.032 },
+      { "Painted Metal", 22, 22, 0.085 },
+      { "Wood Planks", 22, 4, 0.060 },
+    }) do
+      local name, xLimit, yLimit, reliefLimit = table.unpack(limits)
+      for _, seed in ipairs({ 11, 29, 51 }) do
+        local read, heights = Sample.generate(width, height, name, seed)
+        local columnLight, rowLight, columnHeight, rowHeight = {}, {}, {}, {}
+        for y = 0, height - 1 do
+          rowLight[y], rowHeight[y] = 0, 0
+          for x = 0, width - 1 do
+            local lum = Surface.luminance(read(x, y)) * 255
+            local relief = heights[y * width + x + 1]
+            columnLight[x] = (columnLight[x] or 0) + lum / height
+            columnHeight[x] = (columnHeight[x] or 0) + relief / height
+            rowLight[y] = rowLight[y] + lum / width
+            rowHeight[y] = rowHeight[y] + relief / width
+          end
+        end
+        assert(largestDip(columnLight, width) < xLimit, name .. " has a harsh vertical seam")
+        assert(largestDip(rowLight, height) < yLimit, name .. " has a harsh horizontal seam")
+        assert(math.max(largestDip(columnHeight, width), largestDip(rowHeight, height)) < reliefLimit,
+          name .. " has a seam deep enough to draw a hard shadow")
+      end
+    end
+  end)
+
   test("applying a material preserves authored light, mask, alpha and relief", function()
     local w, h = 36, 28
     local function source(x, y)

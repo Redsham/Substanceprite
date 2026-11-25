@@ -80,41 +80,32 @@ local function planks(seed, count, noise)
   local fiber = noise(35, 9, seed + 79)
   local pores = noise(63, 24, seed + 109)
   return function(u, v)
-    local position = boards * u
+    local weather = warp(u, v)
+    local position = boards * (u + 0.004 * weather)
     local board = floor(position) % boards
     local boardHue = hash(board, 0, seed + 16) - 0.5
     local knotX = 0.26 + 0.46 * hash(board, 0, seed + 23)
     local knotY = hash(board, 0, seed + 33)
     local dx, dy = position % 1 - knotX, centered(v - knotY)
     local knot = 1 - smooth(0.10, 1.3, dx * dx * 18 + dy * dy * 105)
-    local bend = warp(u, v) * 0.026 + dx * knot * 0.080
+    local bend = weather * 0.026 + dx * knot * 0.080
     local rings = math.cos(tau * (fibers * (u + bend) + 0.22 * math.sin(tau * 2 * v)))
-    local seam = max(line(position, 0.017, 0.09),
-      0.82 * line(v + hash(board, 5, seed + 39), 0.010, 0.043))
+    local seam = line(position, 0.007, 0.052) * (0.72 + 0.56 * weather)
     local thread = fiber(u + bend, v)
-    local tone = 0.62 + 0.22 * boardHue + 0.23 * thread + 0.08 * rings
-      + 0.061 * pores(u, v) - 0.40 * seam - 0.32 * knot
-    return tone, 0.50 + 0.034 * rings + 0.038 * thread - 0.15 * seam - 0.057 * knot
+    local tone = 0.54 + 0.085 * boardHue + 0.25 * thread + 0.043 * rings
+      + 0.09 * weather + 0.048 * pores(u, v) - 0.075 * seam - 0.18 * knot
+    return tone, 0.50 + 0.026 * rings + 0.053 * thread - 0.026 * seam - 0.045 * knot
   end
 end
 
-local function metal(seed, count, noise)
-  local cloud = noise(7, 5, seed + 37)
-  local brush = noise(7, 57, seed + 81)
-  local scratches = noise(27, 59, seed + 118)
-  local spans, rows = count(3), count(4)
+local function metal(seed, _, noise)
+  local cloud = noise(8, 6, seed + 37)
+  local brush = noise(7, 39, seed + 81)
+  local mottle = noise(29, 25, seed + 118)
   return function(u, v)
-    local row = floor(v * rows) % rows
-    local section = u * spans + 0.37 * (row % 2) + 0.19
-    local seam = max(line(v * rows + 0.09, 0.017, 0.060),
-      0.67 * line(section, 0.012, 0.042))
-    local lip = max(line(v * rows + 0.02, 0.012, 0.040),
-      0.73 * line(section + 0.051, 0.009, 0.035))
-    local tint = hash(floor(section) % spans, row, seed + 17) - 0.5
-    local grain = brush(u, v)
-    local tone = 0.64 + 0.15 * tint + 0.22 * cloud(u, v) + 0.33 * grain
-      + 0.10 * scratches(u, v) - 0.35 * seam + 0.15 * lip
-    return tone, 0.51 + 0.052 * grain - 0.105 * seam + 0.051 * lip
+    local broad, grain, speckle = cloud(u, v), brush(u, v), mottle(u, v)
+    return 0.51 + 0.38 * broad + 0.17 * grain + 0.22 * speckle,
+      0.50 + 0.097 * broad + 0.051 * grain + 0.058 * speckle
   end
 end
 
@@ -124,15 +115,15 @@ local function painted(seed, count, noise)
   local columns, rows = count(4), count(4)
   return function(u, v)
     local panelU, panelV = columns * u + 0.34, rows * v + 0.14
-    local seam = max(line(panelU, 0.022, 0.064), line(panelV, 0.019, 0.056))
-    local bevel = max(line(panelU - 0.072, 0.017, 0.053), line(panelV - 0.075, 0.017, 0.051))
+    local seam = max(line(panelU, 0.010, 0.066), line(panelV, 0.009, 0.060))
+    local bevel = max(line(panelU - 0.072, 0.010, 0.054), line(panelV - 0.075, 0.010, 0.054))
     local dx, dy = (abs(centered(panelU)) - 0.142) / 0.065, (abs(centered(panelV)) - 0.133) / 0.057
     local distance = dx * dx + dy * dy
     local stud = 1 - smooth(0.33, 1.15, distance)
     local pocket = 1 - smooth(1.0, 1.90, distance) - stud
     local tone = 0.61 + 0.24 * paint(u, v) + 0.11 * film(u, v)
-      - 0.32 * seam + 0.11 * bevel + 0.13 * stud - 0.14 * pocket
-    return tone, 0.48 + 0.035 * paint(u, v) - 0.13 * seam + 0.057 * bevel + 0.15 * stud
+      - 0.085 * seam + 0.028 * bevel + 0.13 * stud - 0.14 * pocket
+    return tone, 0.48 + 0.035 * paint(u, v) - 0.034 * seam + 0.014 * bevel + 0.15 * stud
   end
 end
 

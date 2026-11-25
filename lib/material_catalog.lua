@@ -22,13 +22,13 @@ local recipes = {
     layers = { deposit("Moss", 18, "Recesses", 4) },
   },
   {
-    id = "wood-planks", name = "Wood Planks", palette = ramp(0x291D1A, 0x563B27, 0x906441, 0xBD935D, 0xDEC08D),
+    id = "wood-planks", name = "Wood Planks", palette = ramp(0x2B251F, 0x483B2E, 0x665541, 0x907B60, 0xB9A17D),
     roughness = 0.76, metalness = 0, relief = 0.54,
     layers = { deposit("Dirt", 16, "Recesses", 3) },
   },
   {
-    id = "metal", name = "Metal", palette = ramp(0x242A30, 0x495560, 0x788791, 0xAAB5BA, 0xE0E6E3),
-    roughness = 0.29, metalness = 0.94, relief = 0.49,
+    id = "metal", name = "Metal", palette = ramp(0x282927, 0x424441, 0x595B58, 0x878A85, 0xC4C6BE),
+    roughness = 0.50, metalness = 0.94, relief = 0.49,
     layers = { deposit("Wear", 14, "Ridges", 3) },
   },
   {

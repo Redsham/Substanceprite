@@ -1,129 +1,131 @@
 # Substanceprite
 
-Расширение Aseprite для процедурных пиксельных материалов. Оно строит фактуру, наносит износ и отложения поверх исходного рисунка и хранит результат в редактируемых слоях спрайта.
+An Aseprite extension for procedural pixel-art materials. Add texture, wear, and surface deposits to your artwork and keep the results in editable sprite layers.
 
-## Демо
+## Demos
 
-### Материалы
+### Materials
 
-![Дерево, камень и окрашенный металл на тестовых спрайтах](docs/demo/materials.gif)
+![Wood planks, stone, bare metal, and painted metal on sample sprites](docs/demo/materials.gif)
 
-### Износ краски
+### Paint wear
 
-![Покраска металла, появление сколов, ржавчины и потёков](docs/demo/paint-wear.gif)
+![Paint, chips, rust, and runoff building up on metal](docs/demo/paint-wear.gif)
 
-### Детализация
+### Prop details
 
-![Добавление решётки, трафарета, крепежа и повреждений на панель](docs/demo/prop-details.gif)
+![Adding a grille, a stencil, fasteners, and damage to a panel](docs/demo/prop-details.gif)
 
-### Освещение
+### Lighting
 
-![Движение источника света и теней вокруг выпуклых деталей](docs/demo/lighting.gif)
+![Moving a light source around raised details changes the cast shadows](docs/demo/lighting.gif)
 
-## Установка
+## Installation
 
-1. Скачайте [Substanceprite.aseprite-extension](download/Substanceprite.aseprite-extension?raw=true) и откройте его через **Edit → Preferences → Extensions → Add Extension** в Aseprite. В Windows и macOS файл можно открыть двойным щелчком. [Документация Aseprite](https://www.aseprite.org/docs/extensions/)
-2. Перезапустите Aseprite, если приложение предложит это сделать. Команды находятся в меню **Sprite → Substanceprite**.
-3. Для редактора материалов откройте RGB-спрайт с непрозрачными пикселями и выберите его слой или группу. Проверено на Aseprite 1.3.18.6.
+1. Download [Substanceprite.aseprite-extension](download/Substanceprite.aseprite-extension?raw=true) and open it in Aseprite under **Edit → Preferences → Extensions → Add Extension**. On Windows and macOS, you can also double-click the file. [Aseprite documentation](https://www.aseprite.org/docs/extensions/)
+2. Restart Aseprite if prompted. Find the extension commands under **Sprite → Substanceprite**.
+3. To use the material editor, open an RGB sprite and select a layer or group with opaque artwork. Tested with Aseprite 1.3.18.6.
 
-## Материалы
+## Materials
 
-1. Если нужно обработать только часть рисунка, сделайте выделение на холсте. Откройте **Sprite → Substanceprite → Materials…**.
-2. Во вкладке **Material** выберите основу и настройте её фактуру. Кнопка **Browse…** открывает галерею процедурных сфер. Меню **Preview** переключает образец материала и результат на спрайте.
-3. Во вкладке **Layers** нажмите **Add Effect**. Выберите маску слоя и отрегулируйте его цвета, интенсивность и распределение. Например, ограничьте мох углублениями, а потёртости краями.
-4. Во вкладке **Output** проверьте результат и нажмите **Apply Material**. Aseprite создаст редактируемую группу материала. Выберите эту группу или один из её слоёв и снова откройте **Materials…**, чтобы продолжить работу.
+1. To process only part of your artwork, make a selection on the canvas. Open **Sprite → Substanceprite → Materials…**.
+2. In **Material**, choose a base and adjust its texture. **Browse…** opens the gallery of procedural material spheres. Use **Preview** to switch between the material sample and the result on your sprite.
+3. In **Layers**, click **Add Effect**. Choose a layer mask and adjust its colors, strength, and coverage. For example, you can keep moss in cavities and wear along edges.
+4. In **Output**, check the result and click **Apply Material**. Substanceprite creates an editable material group. To continue editing, select the group or any of its layers and reopen **Materials…**.
 
-| Основа | Рисунок поверхности |
+| Base | Surface features |
 | --- | --- |
-| Bark | Борозды и неровные гребни коры |
-| Wood Planks | Швы досок, волокна и сучки |
-| Metal | Полосы обработки, поры и металлический блеск |
-| Painted Metal | Окрашенный металл для сколов, износа и коррозии |
-| Plastic | Мелкая фактура литья с мягким бликом |
-| Stone | Грани и прожилки природного камня |
-| Concrete | Матовая поверхность с порами и мелким заполнителем |
+| Bark | Furrows and uneven ridges |
+| Wood Planks | Subtle joints, grain, and knots |
+| Metal | Mottled, lightly brushed steel with a continuous surface |
+| Painted Metal | Painted steel with shallow panel joints, ready for chips and corrosion |
+| Plastic | Fine molded texture with a soft highlight |
+| Stone | Natural facets and veins |
+| Concrete | Matte finish with pores and fine aggregate |
 
-**Base Colors…** задаёт палитру основы. Цвета отдельного эффекта доступны в **Layers → Advanced Settings**. Порядок эффектов в стеке меняет итоговый рисунок.
+Use **Base Colors…** to set the base palette. Individual effect colors are under **Layers → Advanced Settings**. Changing the order of effects changes how they build up on the surface.
 
-### Карты и маски
+To use the current default palette on an existing material, choose **Base Colors… → Reset → Use Colors**. This keeps the rest of the material settings.
 
-Карта высот задаёт рельеф. Светлые участки выше тёмных. Высоты направляют сток и меняют распределение грязи и мха.
+### Maps and masks
 
-В **Surface Area** можно направить эффект на края, выступы, углубления, склоны, верх или низ. Нажмите **Edit Painted Mask** на выбранном эффекте, чтобы ограничить его кистью. Белый пропускает эффект, чёрный скрывает, серый ослабляет. Нарисованная маска умножается на выбранную область поверхности. Выберите **Painted Mask** в **Surface Area**, чтобы распределять эффект только кистью.
+The height map defines the surface relief. Brighter values represent higher points. The relief guides runoff and affects where dirt and moss build up.
 
-В однокадровом RGB-спрайте материал сохраняет полупрозрачность. В многокадровом спрайте он обрабатывает полностью непрозрачные пиксели выбранного кадра. **Edit Source** открывает исходный слой, а **Update Material** возвращает результат с учётом правок.
+Use **Surface Area** to place effects on edges, raised areas, cavities, slopes, the top, or the bottom. Click **Edit Painted Mask** on the selected effect to refine its coverage with a brush. White shows the effect, black hides it, and gray reduces its strength. The painted mask multiplies the selected surface mask. Choose **Painted Mask** in **Surface Area** to control coverage entirely by painting.
 
-### Освещение
+Materials preserve partial transparency in single-frame RGB sprites. On multi-frame sprites, they process fully opaque pixels in the selected frame. **Edit Source** opens the original layer. Use **Update Material** to regenerate the result after editing.
 
-Во вкладке **Lighting** выберите **Height Source**. Для рельефа можно использовать яркость рисунка или отдельный слой карты высот.
+### Material lighting
 
-- **Direct Light** моделирует освещение поверхности. Настройте направление, высоту, силу и оттенок света.
-- **Cast Shadows** добавляет тени от выступов по тому же направлению света. **Relief Depth (px)** задаёт глубину рельефа, а мягкость регулирует край тени.
-- **Ambient Occlusion** затемняет места рядом с выступами и внутри углублений. Радиус задаёт, насколько далеко распространяется это затемнение.
+In **Lighting**, choose a **Height Source**. You can derive relief from the artwork's brightness or use a dedicated height map layer.
 
-В меню **Preview** режим **Color** показывает результат с включёнными эффектами освещения. **Lit** позволяет заранее посмотреть прямой свет. Режимы **Ambient Occlusion** и **Cast Shadows** показывают геометрию затемнения в оттенках серого. Белый обозначает открытый свету участок.
+- **Direct Light** sets the direction, elevation, strength, and tint of the light.
+- **Cast Shadows** uses the same light direction to cast shadows from raised features. **Relief Depth (px)** sets the depth, and softness controls the shadow edge.
+- **Ambient Occlusion** darkens cavities and areas near raised features. The radius sets how far this shading extends.
 
-Чтобы получить отдельный спрайт, во вкладке **Output** выберите **Map → Normal Map**, **Ambient Occlusion** или **Cast Shadows** и нажмите **Open Map Sprite**.
+Under **Preview**, **Color** shows the result with the enabled lighting effects. **Lit** previews direct lighting. **Ambient Occlusion** and **Cast Shadows** show grayscale maps. White indicates an unoccluded area.
 
-### Освещение готового спрайта
+To open a map as a separate sprite, choose **Normal Map**, **Ambient Occlusion**, or **Cast Shadows** from **Output → Map**, then click **Open Map Sprite**.
 
-**Sprite → Substanceprite → Lighting…** открывает самостоятельный редактор для видимых слоёв RGB-спрайта. Он сохраняет результат в группе **Scene Lighting** поверх рисунка. Направленный свет, AO и падающие тени находятся на отдельных слоях.
+### Scene lighting
 
-- Вкладка **Light** содержит круг направления **Aim** и ползунки высоты, оттенка и силы света. Падающие тени и AO можно включать и настраивать независимо.
-- В **Target** выберите карту высот в **Height Source** или используйте яркость рисунка. Для локальной правки можно ограничить результат выделением или открыть **Edit Mask** и рисовать по маске. Белый пропускает эффект, серый ослабляет, чёрный скрывает.
-- **Preview → Compare** показывает исходник рядом с результатом. В том же меню доступны карты высот, AO и теней.
+**Sprite → Substanceprite → Lighting…** opens a standalone lighting editor for the visible layers of an RGB sprite. It stores direct light, ambient occlusion, and cast shadows on separate layers in a **Scene Lighting** group above the artwork.
 
-После **Apply Lighting** откройте **Lighting…** повторно на любом слое того же кадра. Настройки сохраняются в `.aseprite`, а изменение рисунка или карты высот пересчитывает освещение. Выделение ограничивает область применения, поэтому выступ за его пределами может отбрасывать тень внутрь. Освещаются полностью непрозрачные пиксели. При дублировании кадра копия сохраняет настройки группы и получает собственный расчёт по своему рисунку и карте.
+- In **Light**, use **Aim** and the elevation, tint, and strength controls to place the light. Cast shadows and ambient occlusion have independent controls.
+- In **Target**, select a height map under **Height Source** or use the artwork's brightness. To light a specific area, make a selection or paint a mask with **Edit Mask**. White shows the effect, gray reduces it, and black hides it.
+- **Preview → Compare** shows the original and lit artwork side by side. The menu also includes height, ambient occlusion, and shadow previews.
 
-### Краска и износ
+After clicking **Apply Lighting**, you can reopen **Lighting…** from any layer in the same frame. Settings are saved in the `.aseprite` file, and edits to the artwork or height map recalculate the lighting. A selection limits which pixels receive light and shade, so raised features outside it can cast shadows into it. Lighting applies to fully opaque pixels. Duplicating a frame copies its settings and recalculates lighting for the duplicate's artwork and height map.
 
-В RGB-спрайте откройте **Sprite → Substanceprite → Paint & Wear…** на слое металла или нажмите **Paint Existing Metal…** во вкладке **Material**. В **Paint** выберите цвет и плотность покрытия. Исходная светотень задаёт распределение оттенков краски.
+### Paint and wear
 
-- **Wear** задаёт сколы (**Chips**), истирание кромок (**Edge Wear**), потёртости (**Scuffs**) и выцветание (**Fading**). Ширина кромки, направление потёртостей и Seed находятся в **Pattern Options**.
-- **Weathering** добавляет ржавчину в сколах, потёки, грязь, мох и сажу. **Rain Settings** задаёт силу и длительность дождя. Потёки начинаются у ржавых участков и идут вниз с учётом рельефа.
-- **Colors** редактирует тень, полутон и блик грунтовки, потёртостей, выцветания и отложений. Для раскраски покрытия в три тона выберите **Paint → Use Custom Paint Ramp**. У оголённого металла есть отдельный оттенок **Tint Exposed Metal**.
-- **Maps & Masks** открывает редактируемую карту металла, карту высот и маски отдельных эффектов. Выберите слой карты и правьте его кистью. Белый на карте металла открывает сталь, а на карте высот обозначает выступ. После рисования выберите **Show Result**.
+Select a metal layer in an RGB sprite and open **Sprite → Substanceprite → Paint & Wear…**, or click **Paint Existing Metal…** in **Material**. In **Paint**, choose the coating color and coverage. The paint follows the shading of the original sprite.
 
-## Детали пропов
+- **Wear** controls **Chips**, **Edge Wear**, **Scuffs**, and **Fading**. Find edge width, scuff direction, and Seed under **Pattern Options**.
+- **Weathering** adds rust in chips, runoff streaks, dirt, moss, and soot. **Rain Settings** controls rain strength and duration. Streaks begin at rusty areas and run downhill along the relief.
+- **Colors** sets shadow, midtone, and highlight colors for primer, scuffs, fading, and deposits. For a three-color paint ramp, select **Paint → Use Custom Paint Ramp**. **Tint Exposed Metal** controls the color of exposed steel.
+- **Maps & Masks** opens the editable metal map, height map, and individual effect masks. Select a map layer and edit it with the brush. White exposes steel on the metal map and marks raised areas on the height map. Click **Show Result** when finished.
 
-Откройте RGB-спрайт, выберите слой рисунка или группу материала и запустите **Sprite → Substanceprite → Prop Details…**.
+## Prop details
 
-1. В **Details** загрузите **Cargo Container** для грузового контейнера или **Industrial Panel** для корпуса оборудования. Добавляйте и переставляйте детали в списке. Доступны рамы, рейки, швы, крепёж, таблички, трафареты, решётки, вмятины и потёртости.
-2. Во вкладке **Placement** щёлкните по превью, чтобы переместить выбранную деталь. Координаты, размеры и поворот можно уточнить ползунками. Во вкладке **Style** настройте цвет и силу, надпись или количество элементов. Трафарет использует латинские буквы и цифры высотой от пяти пикселей.
-3. Во вкладке **Target** можно ограничить обработку выделением, выбрать исходную карту высот и включить **Relief Shadows** для теней от новых деталей. **Edit Mask** открывает общую маску. Белый пропускает детали, серый ослабляет, чёрный скрывает.
-4. Нажмите **Apply Details**. Детали, карта высот и тени сохраняются в отдельной группе, а рисунок остаётся в исходном слое. Чтобы продолжить работу, выберите группу и откройте **Prop Details…**. Настроенные наборы можно сохранить через **Presets…**.
+Open an RGB sprite, select an artwork layer or material group, and go to **Sprite → Substanceprite → Prop Details…**.
 
-Детали рисуются по полностью непрозрачным пикселям текущего кадра. Сгенерированные слои пересчитываются после правок исходника и маски. Для ручной дорисовки создайте отдельный слой.
+1. In **Details**, load **Cargo Container** or **Industrial Panel**. Add and reorder frames, rails, seams, fasteners, plates, stencils, grilles, dents, and scuffs.
+2. In **Placement**, click the preview to position the selected detail. Use the sliders to adjust its position, dimensions, and rotation. In **Style**, set the color, strength, text, or element count. Stencils use Latin letters and digits at least five pixels tall.
+3. In **Target**, limit the effect to the selection, choose a source height map, or enable **Relief Shadows**. **Edit Mask** opens the shared mask. White shows details, gray weakens them, and black hides them.
+4. Click **Apply Details**. The details, height map, and shadows are stored in their own group above the original artwork. To edit them again, select the group and reopen **Prop Details…**. Save detail sets through **Presets…**.
 
-### Библиотека альф
+Details apply to fully opaque pixels in the current frame. Generated layers recalculate after edits to the original artwork or mask. Use a separate layer for hand-painted finishing touches.
 
-**Sprite → Substanceprite → Alpha Library…** открывает 24 альфы. В **Damage** собраны сколы, царапины, трещины, пробоины и вмятины. В **Grilles** есть жалюзи, сетка, перфорация и решётки с повреждёнными планками. В **Hardware** можно выбрать болты, заклёпки, сварной шов, петлю и табличку.
+### Alpha library
 
-Чтобы применить альфу, нажмите **Add Alpha…** в **Prop Details** и выберите штамп. В **Style** можно сменить форму, цвет и рельеф. **Auto** использует рельеф самой альфы, **Raised** поднимает участок, **Recessed** углубляет, **Color Only** окрашивает поверхность без изменения карты высот. Положение, размер и поворот задаются во вкладке **Placement**.
+**Sprite → Substanceprite → Alpha Library…** opens a library of 24 alpha stamps. **Damage** includes chips, scratches, cracks, holes, and dents. **Grilles** includes louvers, mesh, perforations, and grilles with broken slats. **Hardware** includes bolts, rivets, a weld seam, a hinge, and a plate.
 
-**Open Alpha Sprite** в библиотеке открывает отдельный спрайт с белой маской на прозрачном фоне. Частичное покрытие хранится в альфа-канале PNG.
+To apply a stamp, click **Add Alpha…** in **Prop Details**. In **Style**, adjust the shape, color, and relief. **Auto** uses the stamp's own relief, **Raised** lifts it, **Recessed** sinks it, and **Color Only** leaves the height map intact. Use **Placement** to set the position, size, and rotation.
 
-## Остальные инструменты
+**Open Alpha Sprite** opens a white mask on a transparent background in a separate sprite. The PNG alpha channel stores partial coverage.
 
-- **Color Ramp Generator** строит Deep Shadow, Shadow, Light и Highlight вокруг выбранного цвета. Есть пять художественных пресетов и настройки оттенка, насыщенности, яркости и контраста. Цвета из превью можно добавить в палитру Aseprite.
-- **Height Map from Art** преобразует яркость или цветовой канал исходного рисунка в слой карты высот.
-- **Texture Generator** наносит отдельные эффекты как новый слой. Настраиваются плотность, масштаб, интенсивность, кластеризация, цвета и Seed. Применение к выделению, ограничение силуэтом и бесшовная генерация доступны в диалоге.
-- **Linked Weathering** открывает специализированный редактор связанных сколов, ржавчины и потёков. Работает с RGB-спрайтами.
+## Other tools
 
-Изменения спрайта, сделанные командами расширения, можно отменить через **Edit → Undo**. Для повторяемости процедурных эффектов используйте одинаковый Seed.
+- **Color Ramp Generator** builds Deep Shadow, Shadow, Light, and Highlight swatches around a chosen color. It has five presets and hue, saturation, lightness, and contrast controls. Add the previewed colors to your Aseprite palette.
+- **Height Map from Art** converts the artwork's luminance or a color channel into a height map layer.
+- **Texture Generator** applies individual effects as new layers. Adjust density, scale, intensity, clustering, colors, and Seed. The dialog also has options for selection, silhouette, and seamless generation.
+- **Linked Weathering** provides a dedicated editor for linked chips, rust, and streaks on RGB sprites.
 
-## Исходники и сборка
+Use **Edit → Undo** to undo changes to the sprite. Reuse the same Seed to reproduce a procedural effect.
 
-Код написан на Lua 5.4. Для сборки нужен Python 3.9 или новее. Из корневой папки исходников выполните следующие команды.
+## Build from source
+
+Substanceprite is written in Lua 5.4. Building the archives requires Python 3.9 or later. From the repository root, run the following commands.
 
 ```sh
 lua5.4 tests/run.lua
 python tools/package.py --source-output dist/Substanceprite-source.zip
 ```
 
-Если ваш Lua 5.4 называется `lua`, запустите `lua tests/run.lua`. В Linux и macOS команда Python часто называется `python3`. В папке `dist/` появятся устанавливаемый файл `Substanceprite.aseprite-extension` и ZIP с исходниками.
+If your Lua 5.4 executable is named `lua`, use `lua tests/run.lua`. On Linux and macOS, the Python command may be `python3`. The `dist/` directory will contain the installable extension and the source ZIP.
 
-В Aseprite можно запустить нативные проверки через CLI.
+Run the Aseprite integration tests through the CLI.
 
 ```sh
 aseprite -b --script tests/aseprite_smoke.lua
@@ -133,4 +135,4 @@ aseprite -b --script tests/prop_details_smoke.lua
 aseprite -b --script tests/scene_lighting_smoke.lua
 ```
 
-Расширение распространяется по [лицензии MIT](LICENSE). Схема проекта, проверки и способ добавить генератор описаны в [CONTRIBUTING.md](CONTRIBUTING.md).
+Substanceprite is distributed under the [MIT License](LICENSE). See the [contributing guide](CONTRIBUTING.md) for project structure, tests, and how to add a generator.

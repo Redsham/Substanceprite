@@ -1,40 +1,41 @@
-# Разработка Substanceprite
+# Contributing to Substanceprite
 
-Используйте Lua 5.4 для алгоритмов и Aseprite для проверки диалогов, изменений спрайта и Undo. Запускайте команды из корня репозитория.
+Use Lua 5.4 to test the algorithms and Aseprite to test dialogs, sprite changes, and Undo. Run these commands from the repository root.
 
 ```sh
 lua5.4 tests/run.lua
 aseprite -b --script tests/aseprite_smoke.lua
 aseprite -b --script tests/material_project_smoke.lua
 aseprite -b --script tests/material_lighting_smoke.lua
+aseprite -b --script tests/prop_details_smoke.lua
 aseprite -b --script tests/scene_lighting_smoke.lua
 python tools/package.py --source-output dist/Substanceprite-source.zip
 ```
 
-Первый набор тестов проверяет процедурные алгоритмы без Aseprite. Нативные проверки используют Aseprite Lua API для палитр, слоёв, карт, масок и освещения. Если Aseprite отсутствует в PATH, укажите путь к исполняемому файлу. В GitHub Actions автоматически проверяются синтаксис Lua, алгоритмы и сборка обоих архивов.
+The Lua suite tests procedural algorithms independently of Aseprite. The integration tests use Aseprite's Lua API to check palettes, layers, maps, masks, and lighting. If Aseprite is absent from your PATH, specify its executable path. GitHub Actions checks Lua syntax, runs the algorithm tests, and builds both archives.
 
-Чтобы сохранить тестовый спрайт на диск и проверить повторное открытие, передайте параметр `--script-param material-project-file=путь.aseprite` или `--script-param material-lighting-file=путь.aseprite` перед соответствующей командой `--script`.
+To save and reopen a test sprite, pass `--script-param material-project-file=path.aseprite` or `--script-param material-lighting-file=path.aseprite` before the matching `--script` argument.
 
-При публикации новой версии обновите скачиваемый файл командой `python tools/package.py --output download/Substanceprite.aseprite-extension`.
+When publishing a new version, update the downloadable extension with `python tools/package.py --output download/Substanceprite.aseprite-extension`.
 
-## Структура
+## Project structure
 
-- `main.lua` регистрирует команды Aseprite и подключает расширения генераторов.
-- `ui/` содержит диалоги, превью и настройки инструментов.
-- `lib/` содержит процедурные алгоритмы, композицию, реестры эффектов и масок и адаптеры Aseprite.
-- `lib/detail_alphas.lua` содержит альфы для деталей пропов. Их отсчёты задают покрытие, высоту и оттенок независимо друг от друга.
-- `generators/user.lua` подключает пользовательские генераторы и маски.
-- `tests/` содержит проверки алгоритмов, интеграционный сценарий и маленький тестовый спрайт.
-- `tools/package.py` собирает ZIP-архив расширения. Для сборщика не нужны сторонние пакеты Python.
+- `main.lua` registers Aseprite commands and loads generator extensions.
+- `ui/` contains tool dialogs, previews, and controls.
+- `lib/` contains procedural algorithms, compositing, effect and mask registries, and Aseprite adapters.
+- `lib/detail_alphas.lua` defines prop detail stamps with separate coverage, height, and tone values.
+- `generators/user.lua` loads custom generators and masks.
+- `tests/` contains algorithm tests, Aseprite integration tests, and a small sprite fixture.
+- `tools/package.py` builds the archives using the Python standard library.
 
-## Генераторы и маски
+## Generators and masks
 
-Модуль `generators/user.lua` возвращает функцию с двумя аргументами, `Effects` и `Masks`. Она запускается при инициализации расширения. Чтобы добавить тестовые эффект **Example Flecks** и маску **Example Upper Third**, раскомментируйте вызов `require("generators.example")` и перезапустите расширение. Для проверки в обычном Lua импортируйте `lib.effect_registry` и `lib.mask_registry` напрямую.
+The `generators/user.lua` module returns a function that takes `Effects` and `Masks`. The extension calls it at initialization. To load the example **Example Flecks** effect and **Example Upper Third** mask, uncomment the call to `require("generators.example")` and restart Aseprite. For tests in standalone Lua, import `lib.effect_registry` and `lib.mask_registry` directly.
 
-Вызов `Effects.register({ ... })` подключает новый эффект. Укажите уникальное `name`, значения по умолчанию в `profile`, палитру `colors` и функции `generate(width, height, settings, footprint, rect)` и `sampler(colors)`. Генератор возвращает массив отсчётов для `rect` по строкам. `sampler` создаёт функцию, переводящую отсчёт в RGBA и, при необходимости, значение рельефа.
+Use `Effects.register({ ... })` to register an effect. Supply a unique `name`, default settings in `profile`, a `colors` palette, and the functions `generate(width, height, settings, footprint, rect)` and `sampler(colors)`. The generator returns an array of samples for `rect` in row order. The sampler returns a function that converts a sample to RGBA and, when needed, a relief value.
 
-Вызов `Masks.register({ ... })` подключает маску. Укажите уникальное `name` и `sampler(width, height, options, footprint, layer)`, которая возвращает функцию покрытия от 0 до 1 для координат `x, y`. Используйте `requiresHeight`, если маске нужна карта высот.
+Use `Masks.register({ ... })` to register a mask. Supply a unique `name` and a `sampler(width, height, options, footprint, layer)` that returns a coverage function for coordinates `x, y`. The function returns a value from 0 to 1. Set `requiresHeight` for masks that need a height map.
 
-Процедурные алгоритмы должны давать одинаковый результат при одинаковых входных данных и Seed. Проверьте работу на прозрачности, неполном выделении и маленьком спрайте. При изменении алгоритма учитывайте, что он используется и в превью, и на холсте.
+Procedural algorithms should reproduce the same result for the same inputs and Seed. Check transparency, partial selections, and small sprites. Changes to an algorithm affect both the preview and the canvas.
 
-Генераторы, маски и тестовые изображения, включённые в источник, должны распространяться на совместимых условиях. В `LICENSE` указано коллективное имя авторов проекта. При публикации владелец репозитория может указать согласованное имя правообладателя.
+Generators, masks, and test images included in the repository must have compatible licenses. The [license](LICENSE) credits the Substanceprite contributors collectively.
