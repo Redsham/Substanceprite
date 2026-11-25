@@ -1,7 +1,11 @@
 local Wear = {}
-Wear.defaults = { edgeWear = 0, edgeWidth = 2, scuffs = 0, scuffDirection = "Auto", fading = 0 }
+Wear.defaults = {
+  edgeWear = 0, edgeWidth = 2, bevelWear = 0, bevelWidth = 1,
+  scuffs = 0, scuffDirection = "Auto", fading = 0,
+}
 
 local abs, floor, min, max = math.abs, math.floor, math.min, math.max
+local bevelAxes = { {1, 0, 1}, {0, 1, 1}, {1, 1, 0.5}, {1, -1, 0.5} }
 
 local function number(value, fallback, lower, upper)
   value = tonumber(value)
@@ -119,6 +123,62 @@ local function contactWidth(contact, patch, amount)
   return smooth(contact) * exposed
 end
 
+local function bevelShoulders(width, height, at, relief)
+  local shoulders = {}
+  for y = 0, height - 1 do
+    for x = 0, width - 1 do
+      local index = at(x, y)
+      local center = relief(index)
+      if center then
+        local strongest = 0
+        for _, axis in ipairs(bevelAxes) do
+          local dx, dy, weight = axis[1], axis[2], axis[3]
+          local a = relief(at(x - dx, y - dy))
+          local b = relief(at(x + dx, y + dy))
+          if a and b then
+            -- Signed curvature rejects flat ramps and inward bends. Requiring
+            -- both samples keeps transparent holes from acting like recesses.
+            local curvature = (2 * center - a - b) * weight
+            local descent = center - min(a, b)
+            if curvature > 0.032 and descent > 0.036 then
+              local bend = smooth((curvature - 0.032) / 0.13)
+              local step = smooth((descent - 0.036) / 0.14)
+              strongest = max(strongest, bend * step)
+            end
+          end
+        end
+        if strongest > 0 then shoulders[index] = strongest end
+      end
+    end
+  end
+  return shoulders
+end
+
+local function widenBevel(shoulders, width, reach, at, relief)
+  if reach == 1 then return shoulders end
+  local band = {}
+  for i, contact in pairs(shoulders) do
+    local x, y = (i - 1) % width, (i - 1) // width
+    local center = relief(i)
+    band[i] = max(band[i] or 0, contact)
+    for _, axis in ipairs(bevelAxes) do
+      local dx, dy, distanceLimit = axis[1], axis[2], reach * math.sqrt(axis[3])
+      for sign = -1, 1, 2 do
+        for distance = 1, math.ceil(distanceLimit) - 1 do
+          local step = distance * sign
+          local index = at(x + dx * step, y + dy * step)
+          local level = relief(index)
+          -- Keep the wider band on the upper surface and stop at gaps.
+          if not level or abs(level - center) > 0.036 then break end
+          local falloff = smooth(1 - distance / distanceLimit)
+          band[index] = max(band[index] or 0, contact * falloff)
+        end
+      end
+    end
+  end
+  return band
+end
+
 local function stroke(buffer, tones, along, across, halfLength, halfWidth, slant, bend, strength, tone, tile)
   for u = floor(along - halfLength), math.ceil(along + halfLength) do
     local alongStroke = (u - along) / halfLength
@@ -196,25 +256,28 @@ local function weatherExposure(x, y, index, height, seamless, at, relief)
 end
 
 -- All channels are dense bytes in row-major order. The caller combines edge
--- with chip geometry, while the two surface marks leave the metal map alone.
+-- and bevel wear with chip geometry. Scuffs and fading leave metal covered.
 function Wear.generate(width, height, params, mask)
-  local wear = { edge = {}, scuff = {}, fading = {}, scuffTones = {}, fadingTones = {} }
+  local wear = { edge = {}, bevel = {}, scuff = {}, fading = {}, scuffTones = {}, fadingTones = {} }
   width, height = floor(width), floor(height)
   if width < 1 or height < 1 then return wear end
   params = params or {}
   local edge = number(params.edgeWear, Wear.defaults.edgeWear, 0, 100) / 100
+  local bevel = number(params.bevelWear, Wear.defaults.bevelWear, 0, 100) / 100
   local scuff = number(params.scuffs, Wear.defaults.scuffs, 0, 100) / 100
   local fade = number(params.fading, Wear.defaults.fading, 0, 100) / 100
-  if edge + scuff + fade == 0 then
-    for i = 1, width * height do
-      wear.edge[i], wear.scuff[i], wear.fading[i], wear.scuffTones[i], wear.fadingTones[i] = 0, 0, 0, 0, 0
+  local heights = params.heights or (params.surface and params.surface.heights)
+  if not heights then bevel = 0 end
+  if edge + bevel + scuff + fade == 0 then
+    for _, values in pairs(wear) do
+      for i = 1, width * height do values[i] = 0 end
     end
     return wear
   end
 
   local reach = floor(number(params.edgeWidth, Wear.defaults.edgeWidth, 1, 6) + 0.5)
+  local bevelWidth = floor(number(params.bevelWidth, Wear.defaults.bevelWidth, 1, 6) + 0.5)
   local seed = floor(number(params.seed, 1, -2147483648, 4294967295))
-  local heights = params.heights or (params.surface and params.surface.heights)
   local seamless = params.seamless == true
   local at, relief = readers(width, height, mask, heights, seamless)
 
@@ -223,6 +286,14 @@ function Wear.generate(width, height, params, mask)
     rubX = field(width, height, 10, 2.5, seed + 771, seamless)
     rubY = field(width, height, 2.5, 10, seed + 771, seamless)
     rough = field(width, height, 2.0, 2.0, seed + 149, seamless)
+  end
+  local bevelContact, bevelPatches
+  if bevel > 0 then
+    local shoulders = bevelShoulders(width, height, at, relief)
+    if next(shoulders) then
+      bevelContact = widenBevel(shoulders, width, bevelWidth, at, relief)
+      bevelPatches = field(width, height, 8, 8, seed + 419, seamless)
+    end
   end
   local scuffCoverage, scuffPigment
   if scuff > 0 then
@@ -240,7 +311,7 @@ function Wear.generate(width, height, params, mask)
     for x = 0, width - 1 do
       local i = y * width + x + 1
       local allowed = at(x, y)
-      local rubbed, brushed, bleached, scuffTone, fadeTone = 0, 0, 0, 0, 0
+      local rubbed, exposed, brushed, bleached, scuffTone, fadeTone = 0, 0, 0, 0, 0, 0
       if allowed then
         if rubX then
           local tangentX, tangentY = edgeAt(x, y, i, reach, at, relief)
@@ -250,6 +321,11 @@ function Wear.generate(width, height, params, mask)
             local alongY = contactWidth(tangentY, 0.81 * rubY(x, y) + texture, edge)
             rubbed = byte(max(alongX, alongY) * (0.31 + 0.69 * edge))
           end
+        end
+        if bevelContact and bevelContact[i] then
+          local patch = 0.91 * bevelPatches(x, y) + 0.09 * hash(x, y, seed + 173)
+          local coverage = smooth((patch - 0.74 + 0.60 * bevel) / 0.36)
+          exposed = byte(bevelContact[i] * coverage * bevel)
         end
         if scuffCoverage and scuffCoverage[i] then
           local center = relief(i)
@@ -271,6 +347,7 @@ function Wear.generate(width, height, params, mask)
         end
       end
       wear.edge[i], wear.scuff[i], wear.fading[i] = rubbed, brushed, bleached
+      wear.bevel[i] = exposed
       wear.scuffTones[i], wear.fadingTones[i] = scuffTone, fadeTone
     end
   end

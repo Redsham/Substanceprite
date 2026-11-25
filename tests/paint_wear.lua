@@ -36,7 +36,7 @@ return function(test)
         assert(value == repeatStrong[name][i] and value >= 0 and value <= 255, name)
         if value ~= changedSeed[name][i] then difference = true end
       end
-      assert(difference, name)
+      assert(difference == (name ~= "bevel"), name)
     end
     for _, name in ipairs({ "edge", "scuff", "fading" }) do
       assert(total(strong[name]) > total(mild[name]), name)
@@ -94,6 +94,75 @@ return function(test)
       assert(edge[first + 12] == 0 and edge[first + 25] == 0 and edge[first + 20] == 0)
     end
     assert(lip > 0, "only the high sides of a raised lip are exposed")
+  end)
+
+  test("bevel wear detects convex shoulders without marking ramps, recess floors or missing relief", function()
+    local width, height = 54, 40
+    local raised, linear, flat = {}, {}, {}
+    local shoulder = {[17] = 0.33, [18] = 0.62, [19] = 0.82, [20] = 0.90, [21] = 0.93}
+    for y = 0, height - 1 do
+      for x = 0, width - 1 do
+        local i = y * width + x + 1
+        raised[i] = shoulder[x] or (x > 21 and x < 42 and 0.93 or 0.18)
+        if x >= 32 and x <= 40 then raised[i] = 0.33 + math.abs(x - 36) * 0.11 end
+        linear[i] = 0.15 + 0.7 * x / (width - 1)
+        flat[i] = 0.66
+      end
+    end
+    for _, map in ipairs({flat, linear}) do
+      local wear = Wear.generate(width, height, {bevelWear = 100, bevelWidth = 6, heights = map})
+      assert(total(wear.bevel) == 0)
+    end
+    assert(total(Wear.generate(width, height, {bevelWear = 100}).bevel) == 0)
+    assert(total(Wear.generate(width, height, {heights = raised}).bevel) == 0)
+
+    local settings = {bevelWear = 100, heights = raised, seed = 42}
+    local bevel = Wear.generate(width, height, settings).bevel
+    local repeatBevel = Wear.generate(width, height, settings).bevel
+    for i, value in ipairs(bevel) do assert(value == repeatBevel[i]) end
+    settings.bevelWear = 50
+    assert(total(Wear.generate(width, height, settings).bevel) < total(bevel))
+    local upper = 0
+    for y = 0, height - 1 do
+      local row = y * width + 1
+      upper = upper + bevel[row + 18] + bevel[row + 19]
+      assert(bevel[row + 17] == 0 and bevel[row + 26] == 0 and bevel[row + 36] == 0)
+    end
+    assert(upper > 0, "convex rounded shoulder should expose paint")
+  end)
+
+  test("bevel width stays on the raised surface and wraps only in seamless mode", function()
+    local width, height = 54, 40
+    local highs, tile = {}, {}
+    for y = 0, height - 1 do
+      for x = 0, width - 1 do
+        local i = y * width + x + 1
+        highs[i] = x >= 16 and x <= 34 and 0.86 or 0.19
+        tile[i] = x <= 8 and 0.86 or 0.19
+      end
+    end
+    local settings = {bevelWear = 100, bevelWidth = 1, heights = highs, seed = 42}
+    local narrow = Wear.generate(width, height, settings).bevel
+    settings.bevelWidth = 6
+    local wide = Wear.generate(width, height, settings).bevel
+    local cut = Wear.generate(width, height, settings, function(x) return x ~= 19 end).bevel
+
+    settings.heights, settings.bevelWidth = tile, 1
+    local unwrapped = Wear.generate(width, height, settings).bevel
+    settings.seamless = true
+    local wrapped = Wear.generate(width, height, settings).bevel
+    local inner, tiledRim, full, broken = 0, 0, false, false
+    for y = 0, height - 1 do
+      local row = y * width + 1
+      local shoulder = narrow[row + 16]
+      full, broken = full or shoulder == 255, broken or shoulder < 128
+      inner = inner + wide[row + 20]
+      tiledRim = tiledRim + wrapped[row]
+      assert(narrow[row + 20] == 0 and wide[row + 15] == 0)
+      assert(cut[row + 19] == 0 and cut[row + 20] == 0 and unwrapped[row] == 0)
+      assert(wrapped[row + width - 1] == 0, "low side of a wrapped ridge remains covered")
+    end
+    assert(inner > 0 and tiledRim > 0 and full and broken)
   end)
 
   test("scuff direction turns the marks and fading remains a broad surface effect", function()

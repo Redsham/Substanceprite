@@ -15,6 +15,7 @@ Paint.defaults = {
   palette = {},
   opacity = 100, chips = 38, corrosion = 68, trails = 0, dirt = 0, moss = 0, soot = 0,
   edgeWear = Wear.defaults.edgeWear, edgeWidth = Wear.defaults.edgeWidth,
+  bevelWear = Wear.defaults.bevelWear, bevelWidth = Wear.defaults.bevelWidth,
   scuffs = Wear.defaults.scuffs, scuffDirection = Wear.defaults.scuffDirection,
   fading = Wear.defaults.fading,
   rainStrength = Rain.defaults.intensity, rainDuration = Rain.defaults.duration,
@@ -112,7 +113,7 @@ function Paint.generate(width, height, params, mask)
     runoff = 100,
   }
   local generated = Linked.generate(width, height, controls, mask)
-  if percent(params, "edgeWear") == 0 and percent(params, "scuffs") == 0
+  if percent(params, "edgeWear") == 0 and percent(params, "bevelWear") == 0 and percent(params, "scuffs") == 0
       and percent(params, "fading") == 0 then
     return generated
   end
@@ -202,7 +203,7 @@ end
 
 function Paint.render(width, height, params, mask, baseReader, generated, chipMask)
   params = params or {}
-  local output = {metal = {}, paint = {}, primer = {}, fading = {}, scuff = {}, rust = {},
+  local output = {metal = {}, paint = {}, bevel = {}, primer = {}, fading = {}, scuff = {}, rust = {},
     trails = {}, dirt = {}, moss = {}, soot = {}}
   if width < 1 or height < 1 then return output end
 
@@ -228,6 +229,7 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
   generated = generated or Paint.generate(width, height, params, footprint)
   local metal = chipMask or generated.chips
   local wear = generated.wear
+  local bevel = wear and percent(params, "bevelWear") > 0 and wear.bevel
   local palette = type(params.palette) == "table" and params.palette or {}
   local metalTint = palette.metal and wearLayer(Colors.get(palette, "metal"))
   local fadingTint = wear and percent(params, "fading") > 0 and wearRamp(palette, "fading")
@@ -271,7 +273,15 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
   if coat > 0 then
     for i, source in pairs(base) do
       local r, g, b, alpha = rgba(source)
-      local coverage = chipCoverage(metal, i)
+      local chips = chipCoverage(metal, i)
+      local coverage = chips
+      if bevel and (bevel[i] or 0) > 0 then
+        local exposed = byte(bevel[i] * permission(masks, "bevel", i))
+        if exposed > 0 then
+          output.bevel[i] = exposed
+          coverage = chips + (1 - chips) * exposed / 255
+        end
+      end
       local paintAlpha = byte(alpha * coat * (1 - coverage))
       if metalTint and coverage > 0 and paintAlpha < 255 then
         -- Metal is under paint: compensate for the fraction the paint still covers.
@@ -305,17 +315,17 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
         end
       end
 
-      local rustAmount = coverage * coat * corrosion * permission(masks, "rust", i)
+      local rustAmount = chips * coat * corrosion * permission(masks, "rust", i)
       if rustAmount > 0 then
         r, g, b = mixed(r, g, b, output.metal[i])
         local x, y = (i - 1) % width, (i - 1) // width
         local oxide = (generated.rust[i] or 0) / 255
         local tone = generated.tones[i] or 0
-        if coverage > chipCoverage(generated.unwornChips or generated.chips, i) then
+        if chips > chipCoverage(generated.unwornChips or generated.chips, i) then
           -- Authored exposures can oxidize anywhere. Rubbing along a rim
           -- produces smaller amounts so freshly polished metal still reads.
           local aged, rustTone = extraRust(i)
-          local authored = coverage > chipCoverage(generated.chips, i)
+          local authored = chips > chipCoverage(generated.chips, i)
           local extra = authored and (0.40 + 0.60 * aged) or (0.13 + 0.56 * aged)
           oxide, tone = max(oxide, extra), rustTone > 0 and rustTone or max(tone, 96)
         end

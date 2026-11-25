@@ -31,6 +31,27 @@ local function trailScore(trails, width)
 end
 
 return function(test)
+  test("bevel coverage removes only the permitted paint and leaves corrosion on chips", function()
+    local generated = {chips = {0, 0, 0, 192, 0}, rust = {0, 0, 0, 223, 0}, tones = {0, 0, 0, 155, 0},
+      wear = {bevel = {255, 255, 140, 128, 255}}}
+    local function base(x)
+      if x < 4 then return 100 + x * 25, 101 + x * 25, 102 + x * 25, 255 end
+    end
+    local settings = {bevelWear = 100, chips = 0, corrosion = 100,
+      effectMasks = {bevel = {255, 0, 128, 255, 255}}}
+    local worn = Paint.render(5, 1, settings, nil, base, generated)
+    assert(worn.bevel[1] == 255 and worn.paint[1] == nil and worn.metal[1] == nil,
+      "fully exposed bevel leaves the original steel visible")
+    assert(worn.bevel[2] == nil and alpha(worn.paint[2]) == 255, "black mask protects paint")
+    assert(worn.bevel[3] == 70 and alpha(worn.paint[3]) == 185, "gray mask reduces exposure")
+    assert(alpha(worn.paint[4]) == 31 and worn.paint[5] == nil, "coverage combines with chips inside the footprint")
+    assert(worn.rust[1] == nil and worn.rust[3] == nil and worn.rust[4] ~= nil)
+    settings.bevelWear = 0
+    local clean = Paint.render(5, 1, settings, nil, base, generated)
+    assert(next(clean.bevel) == nil and alpha(clean.paint[1]) == 255)
+    assert(worn.rust[4] == clean.rust[4], "bevel wear leaves existing chip corrosion intact")
+  end)
+
   test("arbitrary paint colors retain the order of the underlying shades", function()
     local width, height = 32, 4
     local function reader(x) return 18 + 7 * x, 18 + 7 * x, 18 + 7 * x, 255 end

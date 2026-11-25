@@ -21,13 +21,14 @@ local rainSliders = {
 }
 local wearSliders = {
   { id = "chips", label = "Chips", min = 0, max = 100 },
+  { id = "bevelWear", label = "Bevel Wear", min = 0, max = 100 },
   { id = "edgeWear", label = "Edge Wear", min = 0, max = 100 },
   { id = "scuffs", label = "Scuffs", min = 0, max = 100 },
   { id = "fading", label = "Fading", min = 0, max = 100 },
 }
-local maskOptions = { "Rust", "Rust Trails", "Dirt", "Moss", "Soot", "Scuffs", "Fading", "Primer" }
+local maskOptions = { "Bevel Wear", "Rust", "Rust Trails", "Dirt", "Moss", "Soot", "Scuffs", "Fading", "Primer" }
 local maskKeys = { Rust = "rust", ["Rust Trails"] = "trails", Dirt = "dirt", Moss = "moss",
-  Soot = "soot", Scuffs = "scuff", Fading = "fading", Primer = "primer" }
+  Soot = "soot", Scuffs = "scuff", Fading = "fading", Primer = "primer", ["Bevel Wear"] = "bevel" }
 
 function DialogUI.open(site, providedContext)
   local context, errorMessage = providedContext, nil
@@ -65,7 +66,7 @@ function DialogUI.open(site, providedContext)
     local settings = {
       color = Aseprite.rgba(data.paintColor), opacity = data.opacity,
       seed = data.seed, seamless = data.seamless, palette = palette,
-      edgeWidth = data.edgeWidth, scuffDirection = data.scuffDirection,
+      edgeWidth = data.edgeWidth, bevelWidth = data.bevelWidth, scuffDirection = data.scuffDirection,
     }
     for _, slider in ipairs(wearSliders) do settings[slider.id] = data[slider.id] end
     for _, slider in ipairs(weatherSliders) do settings[slider.id] = data[slider.id] end
@@ -137,7 +138,7 @@ function DialogUI.open(site, providedContext)
 
   dlg:label{ label = "Source", text = context.source.name }
   dlg:combobox{ id = "previewMode", label = "Preview", option = "Result",
-    options = { "Result", "Original", "Metal Map", "Height Map" }, onchange = schedule }
+    options = { "Result", "Original", "Bevel Coverage", "Metal Map", "Height Map" }, onchange = schedule }
   dlg:canvas{ id = "preview", width = 330, height = 138,
     onpaint = function(ev) Common.drawPixelPreview(ev.context, preview) end }
   dlg:label{ id = "status", text = " " }
@@ -156,11 +157,14 @@ function DialogUI.open(site, providedContext)
   local values = {}
   for _, slider in ipairs(wearSliders) do values[slider.id] = value(slider.id) end
   Common.addSliders(dlg, wearSliders, values, schedule)
+  dlg:label{ text = "Bevel Wear uses the Height Map. Set it to 0 to turn it off." }
   dlg:check{ id = "wearAdvanced", text = "Pattern Options", onclick = function()
-    for _, id in ipairs({"edgeWidth", "scuffDirection", "seed", "seamless"}) do
+    for _, id in ipairs({"bevelWidth", "edgeWidth", "scuffDirection", "seed", "seamless"}) do
       dlg:modify{ id = id, visible = dlg.data.wearAdvanced }
     end
   end }
+  dlg:slider{ id = "bevelWidth", label = "Bevel Width (px)", min = 1, max = 6,
+    value = initial.bevelWidth or defaults.bevelWidth, visible = false, onchange = schedule }
   dlg:slider{ id = "edgeWidth", label = "Edge Width (px)", min = 1, max = 6,
     value = initial.edgeWidth or defaults.edgeWidth, visible = false, onchange = schedule }
   dlg:combobox{ id = "scuffDirection", label = "Scuff Direction", options = { "Auto", "Horizontal", "Vertical" },

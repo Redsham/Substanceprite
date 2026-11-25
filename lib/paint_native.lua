@@ -6,17 +6,17 @@ local Native = {}
 local namespace = "substanceprite/substanceprite"
 local legacyNamespace = "pixel-art-toolkit/pixel-art-toolkit"
 local stages = {"undercoat", "metal", "paint", "primer", "fading", "scuff", "rust", "trails", "dirt", "moss", "soot"}
-local mapKeys = {metal = "metalMap", height = "heightMap", rust = "rustMask",
+local mapKeys = {metal = "metalMap", height = "heightMap", bevel = "bevelMask", rust = "rustMask",
   trails = "trailsMask", dirt = "dirtMask", moss = "mossMask",
   scuff = "scuffMask", fading = "fadingMask", primer = "primerMask", soot = "sootMask"}
 local mapOrder = {"metalMap", "heightMap", "rustMask", "trailsMask", "dirtMask", "mossMask", "metalBaseline", "scope"}
-local maskedEffects = {"rust", "trails", "dirt", "moss", "scuff", "fading", "primer", "soot"}
+local maskedEffects = {"rust", "trails", "dirt", "moss", "scuff", "fading", "primer", "soot", "bevel"}
 local names = {
   undercoat = "Clean Metal", metal = "Exposed Metal Tint", paint = "Paint",
   primer = "Primer at Exposed Edges", fading = "Faded Paint", scuff = "Scuffs",
   rust = "Rust in Chips", trails = "Rust Trails",
   dirt = "Dirt", moss = "Moss", soot = "Soot", mapsGroup = "Maps & Masks",
-  metalMap = "Metal Map", heightMap = "Height Map", rustMask = "Rust Mask",
+  metalMap = "Metal Map", heightMap = "Height Map", bevelMask = "Bevel Wear Mask", rustMask = "Rust Mask",
   trailsMask = "Rust Trails Mask", dirtMask = "Dirt Mask", mossMask = "Moss Mask",
   scuffMask = "Scuffs Mask", fadingMask = "Fading Mask", primerMask = "Primer Mask", sootMask = "Soot Mask",
   metalBaseline = "Procedural Metal (reference)", scope = "Target Area (reference)",
@@ -455,7 +455,8 @@ function Native.preview(context, settings, rect, channel)
   end
   local prepared, message = prepare(context, settings)
   if not prepared then return nil, message end
-  local map = channel == "Metal Map" and prepared.metal or (channel == "Height Map" and prepared.height)
+  local map = channel == "Metal Map" and prepared.metal or channel == "Height Map" and prepared.height
+    or channel == "Bevel Coverage" and prepared.rendered.bevel
   if map then
     local mode = channel == "Height Map" and "height" or "preview"
     image:drawImage(grayImage(context, map, mode), Point(-rect.x, -rect.y))
@@ -515,6 +516,7 @@ local function replace(context, layer, image)
 end
 
 local function wantsStage(recipe, stage)
+  if stage == "bevel" then return recipe.bevelWear > 0 end
   if stage == "metal" then return recipe.palette.metal ~= nil end
   if stage == "primer" then return recipe.palette.primer ~= nil or recipe.edgeWear > 0 end
   if stage == "scuff" then return recipe.scuffs > 0 end
@@ -547,7 +549,7 @@ end
 
 local function addWearMasks(context, maps, existing, recipe, editing)
   local white
-  for _, key in ipairs({"primer", "fading", "scuff", "soot"}) do
+  for _, key in ipairs({"primer", "fading", "scuff", "soot", "bevel"}) do
     local role = mapKeys[key]
     if not (existing and existing[role]) and (editing == key or wantsStage(recipe, key)) then
       white = white or grayImage(context, context.target.permit)

@@ -12,6 +12,10 @@ An Aseprite extension for procedural pixel-art materials. Add texture, wear, and
 
 ![Paint, chips, rust, and runoff building up on metal](docs/demo/paint-wear.gif)
 
+### Bevel wear
+
+![Paint wearing off raised bevels of a metal panel](docs/demo/bevel-wear.gif)
+
 ### Prop details
 
 ![Adding a grille, a stencil, fasteners, and damage to a panel](docs/demo/prop-details.gif)
@@ -81,10 +85,16 @@ After clicking **Apply Lighting**, you can reopen **Lighting…** from any layer
 
 Select a metal layer in an RGB sprite and open **Sprite → Substanceprite → Paint & Wear…**, or click **Paint Existing Metal…** in **Material**. In **Paint**, choose the coating color and coverage. The paint follows the shading of the original sprite.
 
-- **Wear** controls **Chips**, **Edge Wear**, **Scuffs**, and **Fading**. Find edge width, scuff direction, and Seed under **Pattern Options**.
+- **Wear** controls **Chips**, **Bevel Wear**, **Edge Wear**, **Scuffs**, and **Fading**. Find **Bevel Width (px)**, edge width, scuff direction, and Seed under **Pattern Options**.
 - **Weathering** adds rust in chips, runoff streaks, dirt, moss, and soot. **Rain Settings** controls rain strength and duration. Streaks begin at rusty areas and run downhill along the relief.
 - **Colors** sets shadow, midtone, and highlight colors for primer, scuffs, fading, and deposits. For a three-color paint ramp, select **Paint → Use Custom Paint Ramp**. **Tint Exposed Metal** controls the color of exposed steel.
 - **Maps & Masks** opens the editable metal map, height map, and individual effect masks. Select a map layer and edit it with the brush. White exposes steel on the metal map and marks raised areas on the height map. Click **Show Result** when finished.
+
+#### Bevel wear
+
+Choose a height map under **Maps & Masks → Initial Height** when painting a new material. On an existing painted material, adjust the saved map with **Edit Height Map**. Raise **Wear → Bevel Wear** to expose the original steel along convex bevels and raised shoulders. **Preview → Bevel Coverage** shows where paint will be removed. **Bevel Width (px)** lets the wear extend onto the raised face.
+
+**Bevel Wear** starts at `0` (off). It keeps the original shading and leaves the new steel clean. Chips and rust have their own controls. Use the **Bevel Wear** effect mask to protect parts of the surface, or set **Chips** and **Edge Wear** to `0` to preview bevel wear on its own.
 
 ## Prop details
 

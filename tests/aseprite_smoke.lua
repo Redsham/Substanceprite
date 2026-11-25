@@ -842,4 +842,84 @@ local function checkAgedPaint()
 end
 
 checkAgedPaint()
-print("18/18 Aseprite integration checks passed")
+
+local function checkBevelWear()
+  local Paint = require("lib.paint_native")
+  local px = app.pixelColor
+  local width, height = 57, 36
+  local sprite = Sprite(width, height, ColorMode.RGB)
+  local source = sprite.layers[1]
+  local art, relief = Image(sprite.spec), Image(sprite.spec)
+  local function gray(value) return px.rgba(value, value, value, 255) end
+  local profile = { [12] = 140, [13] = 175, [14] = 247, [25] = 247, [26] = 175, [27] = 140 }
+  for y = 0, height - 1 do
+    for x = 0, width - 1 do
+      if x ~= 9 or y ~= 9 then
+        art:putPixel(x, y, px.rgba(76 + 4 * y, 78 + 4 * y, 79 + 4 * y, 255))
+        local level = profile[x] or (x >= 15 and x <= 24 and 247)
+          or (x >= 34 and x <= 39 and 39) or 122
+        relief:putPixel(x, y, gray(level))
+      end
+    end
+  end
+  sprite:newCel(source, 1, art, Point(0, 0))
+  local heightLayer = sprite:newLayer()
+  heightLayer.name, heightLayer.isVisible = "Height Map - Bevel Test", false
+  sprite:newCel(heightLayer, 1, relief, Point(0, 0))
+  app.layer = source
+  local context = assert(Paint.context(app.site))
+  local settings = {heightMode = "Height Map Layer", heightLayer = heightLayer,
+    color = {r = 103, g = 51, b = 25}, chips = 0, edgeWear = 0, bevelWear = 100, bevelWidth = 2,
+    corrosion = 100, seed = 52}
+  local coverage = assert(Paint.preview(context, settings, nil, "Bevel Coverage"))
+  local result = assert(Paint.preview(context, settings))
+  local exposed = 0
+  for y = 0, height - 1 do
+    for _, x in ipairs({14, 25}) do
+      if px.rgbaR(coverage:getPixel(x, y)) == 255 then
+        equal(result:getPixel(x, y), art:getPixel(x, y), "fully worn shoulder shows the original steel")
+        exposed = exposed + 1
+      end
+    end
+    equal(coverage:getPixel(36, y), gray(0), "groove bottom keeps paint")
+  end
+  assert(exposed > 0, "raised bevel has some fully exposed pixels")
+  equal(result:getPixel(9, 9), 0, "bevel wear respects transparent holes")
+  local group = assert(Paint.apply(context, settings))
+  local function reopen() return assert(Paint.context{sprite = sprite, layer = group, frame = 1}) end
+  equal(reopen().settings.bevelWear, 100, "strength survives reopening")
+  equal(reopen().settings.bevelWidth, 2, "width survives reopening")
+  local layers = assert(Paint.layers(group))
+  local coat, heightCel = layers.outputs.paint:cel(1), layers.heightMap:cel(1)
+  local initialCoat = coat.image.bytes
+  assert(layers.outputs.rust:cel(1).image:isEmpty(), "fresh bevel exposure stays clean")
+  local metalCel = layers.metalMap:cel(1)
+  local authored = Image(metalCel.image)
+  authored:putPixel(47, 12, gray(255))
+  app.transaction("Draw an independent chip", function() metalCel.image = authored end)
+  assert(Paint.refresh(sprite, group) and not layers.outputs.rust:cel(1).image:isEmpty())
+  local chippedCoat = coat.image.bytes
+  assert(chippedCoat ~= initialCoat)
+  local flat = Image(heightCel.image)
+  flat:clear(gray(122))
+  app.transaction("Flatten the bevel relief", function() heightCel.image = flat end)
+  assert(Paint.refresh(sprite, group) and coat.image.bytes ~= chippedCoat)
+  equal(metalCel.image.bytes, authored.bytes, "height edits preserve authored metal pixels")
+  app.undo()
+  assert(Paint.refresh(sprite, group) and coat.image.bytes == chippedCoat, "Undo restores the previous bevel")
+  local mask = layers.bevelMask:cel(1)
+  local protected = Image(mask.image)
+  protected:clear(gray(0))
+  app.transaction("Protect the bevel", function() mask.image = protected end)
+  assert(Paint.refresh(sprite, group) and coat.image.bytes ~= chippedCoat)
+  app.undo()
+  assert(Paint.refresh(sprite, group) and coat.image.bytes == chippedCoat)
+  assert(Paint.apply(reopen(), {bevelWear = 0}))
+  equal(metalCel.image.bytes, authored.bytes, "disabling bevel wear keeps the manually exposed chip")
+  assert(coat.image.bytes ~= chippedCoat and not layers.outputs.rust:cel(1).image:isEmpty())
+  sprite:close()
+  print("PASS optional bevels reveal clean steel, recalculate from height, and respect masks and Undo")
+end
+
+checkBevelWear()
+print("19/19 Aseprite integration checks passed")
