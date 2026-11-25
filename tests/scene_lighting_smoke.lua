@@ -140,3 +140,79 @@ assert(scene(sprite, firstFrame).bytes == sharedLight and scene(sprite, copied.f
 print("PASS duplicated animation frames share lighting controls and keep independent height results")
 sprite:close()
 print("PASS standalone lighting reopens, changes light direction, refreshes from mask/height and retains Undo")
+
+local function checkWeatheredHeight()
+  local Paint = require("lib.paint_native")
+  local sprite = Sprite(58, 40, ColorMode.RGB)
+  local source = sprite.layers[1]
+  local art = Image(sprite.spec)
+  art:clear(px.rgba(121, 109, 97, 255))
+  art:putPixel(4, 7, 0)
+  sprite:newCel(source, 1, art, Point(0, 0))
+  local site = {sprite = sprite, layer = source, frame = sprite.frames[1]}
+  local paint = assert(Paint.apply(assert(Paint.context(site)), {
+    heightMode = "Flat", dirt = 100, moss = 100, chips = 0, seed = 219,
+    rainStrength = 85, rainDuration = 90,
+  }))
+  local layers = assert(Paint.layers(paint))
+  local guide, weathered = assert(layers.heightMap), assert(layers.weatherHeightMap)
+  local base, raised = guide:cel(1).image, weathered:cel(1).image
+  local baseBytes, raisedBytes = base.bytes, raised.bytes
+  assert(not weathered.isEditable and not weathered.isVisible)
+  assert(raisedBytes ~= baseBytes and raised:getPixel(4, 7) == 0)
+  local function countLifted(image)
+    local positive = 0
+    for y = 0, image.height - 1 do
+      for x = 0, image.width - 1 do
+        local delta = px.rgbaR(image:getPixel(x, y)) - px.rgbaR(base:getPixel(x, y))
+        assert(delta >= 0 and delta <= 48, "Deposits should add a shallow positive relief")
+        positive = positive + (delta > 0 and 1 or 0)
+      end
+    end
+    return positive
+  end
+  assert(countLifted(raised) > 30)
+
+  local copy = sprite:newLayer()
+  copy.name, copy.isVisible = "Raw height fixture", false
+  sprite:newCel(copy, 1, Image(base), Point(0, 0))
+  local sceneContext = assert(Native.context(site, false))
+  local settings = {heightMode = "Height Map Layer", heightLayer = guide,
+    normalStrength = 90, lightStrength = 95, lightAngle = 142, lightElevation = 22,
+    smoothing = 0, ao = false, shadows = false}
+  local resolved = assert(Native.preview(sceneContext, settings, nil, "Height Map"))
+  assert(resolved.bytes == raisedBytes, "Scene Lighting must see the weathered height linked to its guide")
+  local raisedLighting = assert(Native.preview(sceneContext, settings, nil, "Result"))
+  settings.heightLayer = copy
+  local flatLighting = assert(Native.preview(sceneContext, settings, nil, "Result"))
+  assert(raisedLighting.bytes ~= flatLighting.bytes, "Weathering height should affect the light on the same artwork")
+  settings.heightLayer = guide
+  local lightGroup = assert(Native.apply(sceneContext, settings))
+  local light = Native.layers(lightGroup).light:cel(1)
+  local before = light.image.bytes
+
+  layers.outputs.dirt.isVisible, layers.outputs.moss.isVisible = false, false
+  assert(Paint.refresh(sprite, paint) and Native.refresh(sprite, lightGroup))
+  assert(weathered:cel(1).image.bytes == baseBytes and light.image.bytes ~= before)
+  layers.outputs.dirt.isVisible, layers.outputs.moss.isVisible = true, true
+  assert(Paint.refresh(sprite, paint) and Native.refresh(sprite, lightGroup))
+  assert(weathered:cel(1).image.bytes == raisedBytes and light.image.bytes == before)
+  assert(not Paint.refresh(sprite, paint) and guide:cel(1).image.bytes == baseBytes,
+    "Repeated refresh must not progressively raise the editable guide")
+
+  local second = sprite:newEmptyFrame()
+  sprite:newCel(source, second, Image(art), Point(0, 0))
+  local secondContext = assert(Paint.context{sprite = sprite, layer = source, frame = second})
+  local laterPaint = assert(Paint.apply(secondContext, {heightMode = "Flat", dirt = 100, moss = 100, seed = 219}))
+  assert(laterPaint ~= paint)
+  local laterLayers = assert(Paint.layers(laterPaint))
+  local laterHeight = laterLayers.weatherHeightMap:cel(second).image
+  local laterBytes = laterHeight.bytes
+  assert(not laterHeight:isEmpty() and not laterLayers.weatherHeightMap:cel(1))
+  assert(not Paint.refresh(sprite, laterPaint) and laterHeight.bytes == laterBytes,
+    "A live refresh must use the frame saved with the painted material")
+  sprite:close()
+end
+
+checkWeatheredHeight()
+print("PASS scene lighting follows weathered height, restores hidden deposits, and keeps the authored guide")

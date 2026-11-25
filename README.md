@@ -49,6 +49,8 @@ An Aseprite extension for procedural pixel-art materials. Add texture, wear, and
 
 Use **Base Colors…** to set the base palette. Individual effect colors are under **Layers → Advanced Settings**. Changing the order of effects changes how they build up on the surface.
 
+**Effective Height** shows the height used for lighting and normal maps, including the shallow relief from dirt and moss. You can also export it from **Output**.
+
 To use the current default palette on an existing material, choose **Base Colors… → Reset → Use Colors**. This keeps the rest of the material settings.
 
 ### Maps and masks
@@ -89,6 +91,8 @@ Select a metal layer in an RGB sprite and open **Sprite → Substanceprite → P
 - **Weathering** adds rust on exposed metal, runoff streaks, dirt, moss, and soot. **Rain Settings** controls rain strength and duration. Streaks begin at rusty areas and run downhill along the relief.
 - **Colors** sets shadow, midtone, and highlight colors for primer, scuffs, fading, and deposits. For a three-color paint ramp, select **Paint → Use Custom Paint Ramp**. **Tint Exposed Metal** controls the color of exposed steel.
 - **Maps & Masks** opens the editable metal map, height map, and individual effect masks. Select a map layer and edit it with the brush. White exposes steel on the metal map and marks raised areas on the height map. Click **Show Result** when finished.
+
+Dirt and moss build up a shallow surface. Use **Preview → Weathered Height** to see the combined height. Lighting and Prop Details that use the painted material's **Height Map** pick up the buildup after **Update Material**. The editable height map stays available for sculpting the base surface.
 
 #### Bevel wear
 

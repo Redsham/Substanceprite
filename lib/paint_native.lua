@@ -6,6 +6,8 @@ local Native = {}
 local namespace = "substanceprite/substanceprite"
 local legacyNamespace = "pixel-art-toolkit/pixel-art-toolkit"
 local stages = {"undercoat", "metal", "paint", "primer", "fading", "scuff", "rust", "trails", "dirt", "moss", "soot"}
+local recomputedLayers = {table.unpack(stages)}
+recomputedLayers[#recomputedLayers + 1] = "weatherHeightMap"
 local mapKeys = {metal = "metalMap", height = "heightMap", bevel = "bevelMask", rust = "rustMask",
   trails = "trailsMask", dirt = "dirtMask", moss = "mossMask",
   scuff = "scuffMask", fading = "fadingMask", primer = "primerMask", soot = "sootMask"}
@@ -16,7 +18,8 @@ local names = {
   primer = "Primer at Exposed Edges", fading = "Faded Paint", scuff = "Scuffs",
   rust = "Rust on Metal", trails = "Rust Trails",
   dirt = "Dirt", moss = "Moss", soot = "Soot", mapsGroup = "Maps & Masks",
-  metalMap = "Metal Map", heightMap = "Height Map", bevelMask = "Bevel Wear Mask", rustMask = "Rust Mask",
+  metalMap = "Metal Map", heightMap = "Height Map", weatherHeightMap = "Height Map - Weathered",
+  bevelMask = "Bevel Wear Mask", rustMask = "Rust Mask",
   trailsMask = "Rust Trails Mask", dirtMask = "Dirt Mask", mossMask = "Moss Mask",
   scuffMask = "Scuffs Mask", fadingMask = "Fading Mask", primerMask = "Primer Mask", sootMask = "Soot Mask",
   metalBaseline = "Procedural Metal (reference)", scope = "Target Area (reference)",
@@ -82,6 +85,32 @@ function Native.layers(group)
   result.outputs = {}
   for _, stage in ipairs(stages) do result.outputs[stage] = result[stage] end
   return result
+end
+
+local function visibleOpacity(layer, sprite)
+  local opacity = 1
+  while layer and layer ~= sprite do
+    if not layer.isVisible then return 0 end
+    opacity = opacity * (layer.opacity or 255) / 255
+    layer = layer.parent
+  end
+  return opacity
+end
+
+function Native.effectiveHeightLayer(authored, frame)
+  if not authored or info(authored).paintRole ~= "heightMap" then return authored end
+  local sprite = authored.sprite
+  frame = frame or sprite.frames[1]
+  local group = authored.parent
+  while group and group ~= sprite do
+    if isPainted(group) and visibleOpacity(group, sprite) > 0 then
+      local layers = Native.layers(group)
+      local weathered = layers.weatherHeightMap
+      if layers.heightMap == authored and weathered and weathered:cel(frame) then return weathered end
+    end
+    group = group.parent
+  end
+  return authored
 end
 
 local function makeImage(sprite, width, height)
@@ -444,6 +473,35 @@ local function grayImage(context, values, mode)
   return imageFrom(context.sprite, target.width, target.height, pixels)
 end
 
+local function depositOpacity(context, role, appliedOnly)
+  local layer = context.layers and context.layers[role]
+  local cel = layer and layer:cel(context.frame)
+  if appliedOnly and not cel then return 0 end
+  return visibleOpacity(layer or context.group or context.source.parent, context.sprite)
+    * (cel and cel.opacity or 255) / 255
+end
+
+local function weatherHeightImage(context, prepared, appliedOnly)
+  local target, values = context.target, {}
+  local relief = prepared.rendered.relief
+  local dirtOpacity = depositOpacity(context, "dirt", appliedOnly)
+  local mossOpacity = depositOpacity(context, "moss", appliedOnly)
+  for y = 0, target.height - 1 do
+    for x = 0, target.width - 1 do
+      if target.alphaAt(x, y) > 0 then
+        local index = y * target.width + x + 1
+        local added = (relief.dirt[index] or 0) * dirtOpacity + (relief.moss[index] or 0) * mossOpacity
+        local base = prepared.height[index]
+        if base == nil and added > 0 then
+          base = Surface.luminance(target.read(x + target.x, y + target.y)) * 255
+        end
+        if base ~= nil then values[index] = byte(base + 255 * added) end
+      end
+    end
+  end
+  return grayImage(context, values, "height")
+end
+
 function Native.preview(context, settings, rect, channel)
   settings = settings or {}
   local target = context.target
@@ -455,6 +513,10 @@ function Native.preview(context, settings, rect, channel)
   end
   local prepared, message = prepare(context, settings)
   if not prepared then return nil, message end
+  if channel == "Weathered Height" then
+    image:drawImage(weatherHeightImage(context, prepared), Point(-rect.x, -rect.y))
+    return image
+  end
   local map = channel == "Metal Map" and prepared.metal or channel == "Height Map" and prepared.height
     or channel == "Bevel Coverage" and prepared.rendered.bevel
   if map then
@@ -560,6 +622,16 @@ local function addWearMasks(context, maps, existing, recipe, editing)
   end
 end
 
+local function updateWeatheredHeight(context, maps, prepared)
+  local layer = context.layers and context.layers.weatherHeightMap
+  if layer then
+    replace(context, layer, weatherHeightImage(context, prepared))
+  elseif prepared.recipe.dirt > 0 or prepared.recipe.moss > 0 then
+    layer = createLayer(context, maps, "weatherHeightMap", weatherHeightImage(context, prepared), false)
+    layer.isVisible = false
+  end
+end
+
 function Native.apply(context, settings)
   settings = settings or {}
   local prepared, message = prepare(context, settings, true)
@@ -580,6 +652,7 @@ function Native.apply(context, settings)
       updateStages(context, group, prepared.recipe, images)
       if context.layers.mapsGroup then
         addWearMasks(context, context.layers.mapsGroup, context.layers, prepared.recipe, settings.editMask)
+        updateWeatheredHeight(context, context.layers.mapsGroup, prepared)
       end
     end)
   else
@@ -605,6 +678,7 @@ function Native.apply(context, settings)
         layer.isVisible = key == "metalMap"
       end
       addWearMasks(context, maps, nil, prepared.recipe, settings.editMask)
+      updateWeatheredHeight(context, maps, prepared)
       maps.isVisible, maps.isCollapsed = false, true
     end)
   end
@@ -613,15 +687,17 @@ function Native.apply(context, settings)
   return group
 end
 
-function Native.refresh(sprite, group)
-  if sprite.colorMode ~= ColorMode.RGB or not isPainted(group) then return false end
-  local context = Native.context({sprite = sprite, layer = group})
-  local layers = context and context.layers or Native.layers(group)
-  local images = context and outputImages(context, assert(prepare(context, {})))
+local function refreshFrame(sprite, group, layers, frame)
+  local context = Native.context{sprite = sprite, layer = group, frame = frame}
+  local prepared = context and assert(prepare(context, {}))
+  local images = prepared and outputImages(context, prepared)
+  if prepared and layers.weatherHeightMap then
+    images.weatherHeightMap = weatherHeightImage(context, prepared, true)
+  end
   local changed = false
-  for _, stage in ipairs(stages) do
+  for _, stage in ipairs(recomputedLayers) do
     local layer = layers[stage]
-    local cel = context and layer and layer:cel(context.frame) or (layer and layer.cels[1])
+    local cel = layer and layer:cel(frame)
     if cel then
       local image = cel.image
       local replacement = images and images[stage]
@@ -631,6 +707,20 @@ function Native.refresh(sprite, group)
         image.bytes = bytes
         changed = true
       end
+    end
+  end
+  return changed
+end
+
+function Native.refresh(sprite, group)
+  if sprite.colorMode ~= ColorMode.RGB or not isPainted(group) then return false end
+  local layers = Native.layers(group)
+  if not layers.scope or not layers.heightMap or not layers.metalMap then return false end
+  local changed = false
+  for _, scope in ipairs(layers.scope.cels) do
+    local frame = scope.frame
+    if layers.heightMap:cel(frame) and layers.metalMap:cel(frame) and refreshFrame(sprite, group, layers, frame) then
+      changed = true
     end
   end
   return changed

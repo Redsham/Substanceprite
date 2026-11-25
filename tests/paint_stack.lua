@@ -206,13 +206,71 @@ return function(test)
       "height map affects both deposit patterns")
     assert(next(guided.dirt) and next(guided.moss) and not arrayEqual(guided.moss, guided.dirt, size))
     for key, pixels in pairs(guided) do
-      for i in pairs(pixels) do assert(footprint[i], key .. " passed the selection") end
+      if key ~= "relief" then
+        for i in pairs(pixels) do assert(footprint[i], key .. " passed the selection") end
+      end
     end
     params.effectMasks = {dirt = {}, moss = {}}
     local masked = Paint.render(width, height, params, footprint, base)
     assert(next(masked.dirt) == nil and next(masked.moss) == nil)
     assert(arrayEqual(masked.paint, guided.paint, size) and arrayEqual(masked.rust, guided.rust, size),
       "deposit masks cannot change the paint or rust")
+  end)
+
+  test("weather deposits add shallow relief only where their visible coverage lands", function()
+    local width, height = 49, 42
+    local count, heights = width * height, {}
+    local function originalHeight(x, y)
+      return x >= 16 and x <= 22 and 0.22 or (y < 18 and 0.8 or 0.57)
+    end
+    for y = 0, height - 1 do
+      for x = 0, width - 1 do heights[y * width + x + 1] = originalHeight(x, y) end
+    end
+    local function base(x, y)
+      return 98 + y, 104 + x, 119, x == 4 and 0 or 255
+    end
+    local function translucent(x, y)
+      local r, g, b, a = base(x, y)
+      return r, g, b, a == 0 and 0 or 128
+    end
+    for _, deposit in ipairs({"dirt", "moss"}) do
+      local settings = {chips = 0, corrosion = 0, seed = 219, heights = heights,
+        rainStrength = 85, rainDuration = 90, [deposit] = 100}
+      local baked = Paint.render(width, height, settings, nil, base)
+      local depthMap = baked.relief[deposit]
+      local repeated = Paint.render(width, height, settings, nil, base).relief[deposit]
+      local translucentMap = Paint.render(width, height, settings, nil, translucent).relief[deposit]
+      assert(arrayEqual(depthMap, repeated, count), "deposit heights must be deterministic")
+
+      local feather = {}
+      for i = 1, count do feather[i] = 128 end
+      settings.effectMasks = {[deposit] = feather}
+      local feathered = Paint.render(width, height, settings, nil, base).relief[deposit]
+      local raised, shaded = 0, 0
+      for i, depth in pairs(depthMap) do
+        assert(depth > 0 and depth <= 0.12, "deposit height exceeds shallow surface relief")
+        assert((i - 1) % width ~= 4 and baked[deposit][i], "height escaped its visible deposit")
+        raised = raised + 1
+        local filtered = feathered[i] or 0
+        local seeThrough = translucentMap[i] or 0
+        assert(filtered <= depth and seeThrough <= depth, "mask or source alpha increased the relief")
+        if filtered > 0 and filtered < depth and seeThrough > 0 and seeThrough < depth then shaded = shaded + 1 end
+      end
+      assert(raised > 20 and shaded > 10, "too few covered pixels to exercise relief and feathering")
+
+      settings.effectMasks = {[deposit] = {}}
+      assert(not next(Paint.render(width, height, settings, nil, base).relief[deposit]), "a black mask still builds relief")
+      settings.effectMasks = nil
+      local swatches = PaintColors.get({}, deposit)
+      for _, swatch in ipairs(swatches) do swatch.a = 0 end
+      settings.palette = {[deposit] = swatches}
+      assert(not next(Paint.render(width, height, settings, nil, base).relief[deposit]), "invisible pigment still builds relief")
+      settings.palette, settings[deposit] = nil, 0
+      assert(not next(Paint.render(width, height, settings, nil, base).relief[deposit]), "a disabled deposit still builds relief")
+    end
+    for i, depth in ipairs(heights) do
+      assert(depth == originalHeight((i - 1) % width, (i - 1) // width), "render changed the authored height map")
+    end
   end)
 
   test("rain strength affects stain and duration carries it farther down", function()

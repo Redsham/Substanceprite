@@ -197,7 +197,7 @@ local function compileLayers(width, height, options, mask, rect, stages)
   return layers
 end
 
-local function process(layer, index, x, y, r, g, b, height, context)
+local function process(layer, index, x, y, r, g, b, height, sourceAlpha, context)
   local opacity = layer.amount
   if layer.palette then
     local color = layer.palette[byte(Surface.luminance(r, g, b) * 255)]
@@ -231,7 +231,10 @@ local function process(layer, index, x, y, r, g, b, height, context)
     local alpha, relief
     outR, outG, outB, alpha, relief = layer.deposit(sample)
     if not outR then return r, g, b, height end
-    if height then height = height + (relief or 0) * opacity end
+    if height and relief then
+      if layer.style == "Dirt" or layer.style == "Moss" then relief = relief * sourceAlpha end
+      height = height + relief * opacity
+    end
     opacity = opacity * alpha / 255
     if context and layer.lighting > 0 and opacity > 0 then
       outR, outG, outB = Lighting.tint(outR, outG, outB, r, g, b, opacity, context, layer.lighting)
@@ -278,9 +281,10 @@ function Composer.render(width, height, options, mask, rect, baseReader)
       if r ~= nil and (alpha == nil or alpha > 0) then
         local depth
         if relief then depth = options.heights and options.heights[baseIndex] or 0.5 end
+        local sourceAlpha = (alpha or 255) / 255
         local context = lightAt and lightAt(x, y)
         for _, layer in ipairs(layers) do
-          r, g, b, depth = process(layer, index, x, y, r, g, b, depth, context)
+          r, g, b, depth = process(layer, index, x, y, r, g, b, depth, sourceAlpha, context)
           if layer.stage then layer.stage.pixels[index] = Composer.pack(r, g, b) end
         end
         value = Composer.pack(r, g, b)

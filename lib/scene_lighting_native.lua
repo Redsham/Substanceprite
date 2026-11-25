@@ -1,6 +1,7 @@
 local CastShadow = require("lib.cast_shadow")
 local Lighting = require("lib.material_lighting")
 local Normal = require("lib.normal")
+local Paint = require("lib.paint_native")
 local SceneLighting = require("lib.scene_lighting")
 local Surface = require("lib.surface")
 
@@ -240,6 +241,7 @@ end
 local function inputs(context, settings)
   local target = context.target
   local heightLayer = settings.heightMode == "Height Map Layer" and settings.heightLayer or nil
+  heightLayer = Paint.effectiveHeightLayer(heightLayer, context.frame)
   local heightAt = celReader(heightLayer and heightLayer:cel(context.frame))
   local maskLayer = context.layers and context.layers.mask
   local mask = maskLayer and maskLayer:cel(context.frame)

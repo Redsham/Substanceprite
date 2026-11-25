@@ -138,7 +138,8 @@ function DialogUI.open(site, providedContext)
 
   dlg:label{ label = "Source", text = context.source.name }
   dlg:combobox{ id = "previewMode", label = "Preview", option = "Result",
-    options = { "Result", "Original", "Bevel Coverage", "Metal Map", "Height Map" }, onchange = schedule }
+    options = { "Result", "Original", "Bevel Coverage", "Metal Map", "Height Map", "Weathered Height" },
+    onchange = schedule }
   dlg:canvas{ id = "preview", width = 330, height = 138,
     onpaint = function(ev) Common.drawPixelPreview(ev.context, preview) end }
   dlg:label{ id = "status", text = " " }

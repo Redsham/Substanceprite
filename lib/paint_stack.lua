@@ -204,7 +204,7 @@ end
 function Paint.render(width, height, params, mask, baseReader, generated, chipMask)
   params = params or {}
   local output = {metal = {}, paint = {}, bevel = {}, primer = {}, fading = {}, scuff = {}, rust = {},
-    trails = {}, dirt = {}, moss = {}, soot = {}}
+    trails = {}, dirt = {}, moss = {}, soot = {}, relief = {dirt = {}, moss = {}}}
   if width < 1 or height < 1 then return output end
 
   local base, footprint = {}, {}
@@ -442,9 +442,10 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
     local field = layerVariant(width, height, params, surface, footprint, stage, strength)
     if field then
       local sample = Effects.sampler(stage.style, Colors.get(palette, stage.key))
+      local stageRelief = output.relief[stage.key]
       for i, source in pairs(base) do
         if field[i] and field[i] > 0 then
-          local dr, dg, db, sampleAlpha = sample(field[i])
+          local dr, dg, db, sampleAlpha, relief = sample(field[i])
           local r, g, b, sourceAlpha = rgba(source)
           local x, y = (i - 1) % width, (i - 1) // width
           local wet = 1
@@ -454,6 +455,8 @@ function Paint.render(width, height, params, mask, baseReader, generated, chipMa
           end
           local alpha = byte((sampleAlpha or 0) * strength * sourceAlpha / 255 * wet * permission(masks, stage.key, i))
           if alpha > 0 then
+            -- The sampled relief already includes the pigment alpha. Scale it by the emitted coverage.
+            if stageRelief and relief then stageRelief[i] = relief * alpha / sampleAlpha end
             r, g, b = mixed(r, g, b, output.metal[i])
             r, g, b = mixed(r, g, b, output.paint[i])
             r, g, b = mixed(r, g, b, output.primer[i])

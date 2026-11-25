@@ -5,6 +5,7 @@ local MaterialSample = require("lib.material_sample")
 local MaterialSphere = require("lib.material_sphere")
 local Normal = require("lib.normal")
 local Workspace = {}
+Workspace.heightChannel = "Effective Height"
 
 local function read(target, x, y)
   return target.read(target.x + x, target.y + y)
@@ -93,10 +94,13 @@ end
 function Workspace.preview(target, settings, rect, channel)
   rect = rect or { x = 0, y = 0, width = target.width, height = target.height }
   local isMap = Lighting.isMap(channel)
-  local normals, colors, map, shade, paint
+  local normals, colors, depths, map, shade, paint
   local shaded = channel == "Lit" or Lighting.enabled(settings)
   if channel == "Normal Map" then
     normals = Workspace.normals(target, settings, rect)
+  elseif channel == Workspace.heightChannel then
+    local _, details = render(target, settings, rect, false, true)
+    depths = details.heights
   elseif isMap then
     local _, details = render(target, settings, nil, false, true)
     map = Lighting.map(target.width, target.height, details.heights, settings, target.mask, rect, channel)
@@ -123,6 +127,12 @@ function Workspace.preview(target, settings, rect, channel)
       local r, g, b
       if normals then
         r, g, b = Normal.rgb(normals[index])
+      elseif depths then
+        local height = depths[index]
+        if height ~= nil then
+          local gray = math.floor(height * 255 + 0.5)
+          r, g, b = gray, gray, gray
+        end
       elseif map then
         local gray = math.floor((1 - map[index]) * 255 + 0.5)
         r, g, b = gray, gray, gray

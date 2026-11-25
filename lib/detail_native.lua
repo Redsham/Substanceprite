@@ -277,6 +277,7 @@ end
 local function affectedLayers(context, settings)
   local target, width, height = context.target, context.target.width, context.target.height
   local heightLayer = settings.heightMode == "Height Map Layer" and settings.heightLayer or nil
+  heightLayer = Paint.effectiveHeightLayer(heightLayer, context.frame)
   local guide = celReader(heightLayer and heightLayer:cel(context.frame))
   local matteCel = context.parts and context.parts.mask:cel(context.frame)
   local matte = celReader(matteCel)

@@ -163,6 +163,55 @@ return function(test)
     end
   end)
 
+  test("dirt and moss relief follow mask and source coverage without changing the guide", function()
+    local width, height = 46, 34
+    local guide, footprint, feather = makeGuide(width, height), {}, {}
+    for i = 1, width * height do
+      footprint[i] = (i - 1) % width ~= 5
+      feather[i] = 0.5
+    end
+    local function base(x, y)
+      local r, g, b = color(x, y)
+      return r, g, b, x == 4 and 0 or 255
+    end
+    local function translucent(x, y)
+      local r, g, b, a = base(x, y)
+      return r, g, b, a == 0 and 0 or 128
+    end
+    for _, style in ipairs({"Dirt", "Moss"}) do
+      local layer = Composer.newLayer("Deposits", style)
+      layer.id, layer.amount, layer.density, layer.intensity = style, 100, 100, 95
+      local options = {layers = {layer}, heights = guide, seed = 219, captureRelief = true}
+      local function render(reader)
+        local _, details = Composer.render(width, height, options, footprint, nil, reader)
+        return details.heights
+      end
+      local normal = render(base)
+      local faded = render(translucent)
+      options.masks = {[style] = feather}
+      local masked = render(base)
+      options.masks = nil
+      for _, swatch in ipairs(layer.colors) do swatch.a = 0 end
+      local invisible = render(base)
+      local raised = 0
+      for i = 1, width * height do
+        local x = (i - 1) % width
+        assert(guide[i] == (x < width // 2 and 0.24 or 0.78), "render mutated the authored guide")
+        if x == 4 or not footprint[i] then
+          assert(normal[i] == nil and faded[i] == nil and masked[i] == nil and invisible[i] == nil)
+        else
+          local depth = normal[i] - guide[i]
+          assert(depth >= 0 and depth <= 0.12, "deposits only add shallow relief")
+          assert(math.abs(faded[i] - guide[i] - depth * 128 / 255) < 1e-9)
+          assert(math.abs(masked[i] - guide[i] - depth * 0.5) < 1e-9)
+          assert(invisible[i] == guide[i], "transparent deposit pigment added relief")
+          if depth > 0 then raised = raised + 1 end
+        end
+      end
+      assert(raised > 20, "too few visible " .. style .. " pixels to measure relief")
+    end
+  end)
+
   test("a tiled material stack repeats its colors, stages and relief exactly across crops", function()
     local width, height = 19, 11
     local finish = Composer.newLayer("Finish", "Brushed Steel")

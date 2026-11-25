@@ -188,7 +188,8 @@ function MaterialDialog.open(plugin, site, project)
     local channel, current = data.channel, settings()
     local hasArtwork = target and target.read ~= nil
     local canApply = hasArtwork and Aseprite.rgbPainter(target.site) ~= nil
-    local canPreviewArtwork = hasArtwork and (canApply or channel == "Normal Map" or Lighting.isMap(channel))
+    local canPreviewArtwork = hasArtwork
+      and (canApply or channel == "Normal Map" or channel == Workspace.heightChannel or Lighting.isMap(channel))
     local canShowSphere = channel == sphereChannel or channel == compareChannel
     local message
     preview, sphere = nil, nil
@@ -381,7 +382,8 @@ function MaterialDialog.open(plugin, site, project)
   end
 
   dlg:combobox{ id = "channel", label = "Preview", option = compareChannel,
-    options = { compareChannel, "Color", sphereChannel, "Lit", Lighting.aoChannel, Lighting.shadowChannel, "Normal Map" },
+    options = { compareChannel, "Color", sphereChannel, "Lit", Workspace.heightChannel, "Normal Map",
+      Lighting.aoChannel, Lighting.shadowChannel },
     onchange = changeChannel }
   dlg:canvas{ id = "preview", width = 336, height = 134,
     onpaint = function(ev)
@@ -517,7 +519,7 @@ function MaterialDialog.open(plugin, site, project)
     selected = project and saved.useSelection == true or (not project and hasSelection), onclick = changeTarget }
   dlg:check{ id = "seamless", text = "Seamless", selected = saved.seamless == true, onclick = schedule }
   dlg:combobox{ id = "mapChannel", label = "Map", option = "Normal Map",
-    options = { "Normal Map", Lighting.aoChannel, Lighting.shadowChannel }, onchange = function()
+    options = { "Normal Map", Workspace.heightChannel, Lighting.aoChannel, Lighting.shadowChannel }, onchange = function()
       dlg:modify{ id = "channel", option = dlg.data.mapChannel }
       outputVisibility()
       changeChannel()
